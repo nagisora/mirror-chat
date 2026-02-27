@@ -132,7 +132,8 @@ async function processOneTask(aiKey, prompt, settings) {
             );
           }
         );
-      });
+      };
+
       chrome.tabs.onUpdated.addListener(onUpdated);
     });
   });
