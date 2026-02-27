@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI一括質問</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>AI一括質問</h1>
+      <p class="subtitle">4つのAIに質問を送信し、Obsidianに保存</p>
+    </header>
+
+    <main class="main">
+      <div class="form-group">
+        <label for="prompt">質問（プロンプト）</label>
+        <textarea id="prompt" rows="5" placeholder="AIに聞きたいことを入力してください..."></textarea>
+      </div>
+
+      <div class="services-info">
+        <span class="services-label">送信先:</span>
+        <span class="services-list">ChatGPT → Claude → Gemini → Grok</span>
+      </div>
+
+      <div class="actions">
+        <button id="submit" class="btn btn-primary">
+          <span class="btn-text">送信して保存</span>
+          <span class="btn-loading" hidden>処理中...</span>
+        </button>
+        <a href="options.html" target="_blank" class="btn btn-secondary">設定</a>
+      </div>
+
+      <div id="status" class="status" hidden></div>
+    </main>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

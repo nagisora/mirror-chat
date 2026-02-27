@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI一括質問 - 設定</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>AI一括質問＆Obsidian保存 - 設定</h1>
+      <p class="subtitle">Obsidian Local REST APIとDOMセレクタを設定します</p>
+    </header>
+
+    <form id="optionsForm">
+      <section class="section">
+        <h2>Obsidian Local REST API</h2>
+        <p class="section-desc">Obsidianの「Local REST API」プラグインをインストール・有効化し、以下を設定してください。</p>
+
+        <div class="form-group">
+          <label for="obsidianPort">ポート番号</label>
+          <input type="number" id="obsidianPort" placeholder="27124" min="1" max="65535">
+        </div>
+
+        <div class="form-group">
+          <label for="obsidianToken">APIキー（Bearer トークン）</label>
+          <input type="password" id="obsidianToken" placeholder="あなたのAPIキー">
+        </div>
+
+        <div class="form-group">
+          <label for="obsidianPath">保存先ベースパス</label>
+          <input type="text" id="obsidianPath" placeholder="AI-Research">
+          <small>例: AI-Research （日付と質問からサブフォルダが自動作成されます）</small>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>DOMセレクタ（上級者向け）</h2>
+        <p class="section-desc">AIサービスのUI変更で動作しなくなった場合、セレクタを調整できます。通常はデフォルトのままで問題ありません。</p>
+
+        <div class="selector-group">
+          <h3>ChatGPT</h3>
+          <div class="form-group">
+            <label>入力欄セレクタ（カンマ区切りで複数指定可）</label>
+            <input type="text" id="chatgptInputSelector" placeholder="textarea[data-id], #prompt-textarea">
+          </div>
+          <div class="form-group">
+            <label>送信ボタンセレクタ</label>
+            <input type="text" id="chatgptSubmitSelector" placeholder="button[data-testid='send-button'], [data-testid='send-button']">
+          </div>
+          <div class="form-group">
+            <label>回答エリアセレクタ</label>
+            <input type="text" id="chatgptResponseSelector" placeholder="[data-message-author-role='assistant'], .markdown">
+          </div>
+        </div>
+
+        <div class="selector-group">
+          <h3>Claude</h3>
+          <div class="form-group">
+            <label>入力欄セレクタ</label>
+            <input type="text" id="claudeInputSelector" placeholder="[contenteditable='true'], .ProseMirror">
+          </div>
+          <div class="form-group">
+            <label>送信ボタンセレクタ</label>
+            <input type="text" id="claudeSubmitSelector" placeholder="button[type='submit'], [aria-label='Send']">
+          </div>
+          <div class="form-group">
+            <label>回答エリアセレクタ</label>
+            <input type="text" id="claudeResponseSelector" placeholder="[data-role='assistant'], .markdown">
+          </div>
+        </div>
+
+        <div class="selector-group">
+          <h3>Gemini</h3>
+          <div class="form-group">
+            <label>入力欄セレクタ</label>
+            <input type="text" id="geminiInputSelector" placeholder="[contenteditable='true'], textarea, .ql-editor">
+          </div>
+          <div class="form-group">
+            <label>送信ボタンセレクタ</label>
+            <input type="text" id="geminiSubmitSelector" placeholder="button[aria-label='Send'], button.send">
+          </div>
+          <div class="form-group">
+            <label>回答エリアセレクタ</label>
+            <input type="text" id="geminiResponseSelector" placeholder="[data-message-author-role='model'], .markdown">
+          </div>
+        </div>
+
+        <div class="selector-group">
+          <h3>Grok</h3>
+          <div class="form-group">
+            <label>入力欄セレクタ</label>
+            <input type="text" id="grokInputSelector" placeholder="textarea, [contenteditable='true']">
+          </div>
+          <div class="form-group">
+            <label>送信ボタンセレクタ</label>
+            <input type="text" id="grokSubmitSelector" placeholder="button[type='submit'], button.send">
+          </div>
+          <div class="form-group">
+            <label>回答エリアセレクタ</label>
+            <input type="text" id="grokResponseSelector" placeholder="[data-role='assistant'], .response-content">
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>保存に失敗したデータ</h2>
+        <p class="section-desc">Obsidianが起動していない場合などにローカルに一時保存されたデータです。設定を確認後、再送信できます。</p>
+        <div id="pendingSaves" class="pending-list"></div>
+      </section>
+
+      <div class="actions">
+        <button type="submit" class="btn btn-primary">保存</button>
+        <button type="button" id="resetSelectors" class="btn btn-secondary">セレクタをデフォルトに戻す</button>
+      </div>
+    </form>
+
+    <div id="saveStatus" class="status" hidden></div>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>

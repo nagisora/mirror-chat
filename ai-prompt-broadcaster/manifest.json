@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "AI一括質問＆Obsidian保存ツール",
+  "version": "1.0.0",
+  "description": "プロンプトを4つのAIサービスに順次送信し、回答をObsidianに保存するChrome拡張",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "notifications",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://chat.openai.com/*",
+    "https://claude.ai/*",
+    "https://gemini.google.com/*",
+    "https://*.x.ai/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://chat.openai.com/*"],
+      "js": ["content-chatgpt.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://claude.ai/*"],
+      "js": ["content-claude.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://gemini.google.com/*"],
+      "js": ["content-gemini.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.x.ai/*", "https://grok.x.ai/*"],
+      "js": ["content-grok.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
