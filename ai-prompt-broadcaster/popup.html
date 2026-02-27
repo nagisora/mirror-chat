@@ -8,13 +8,38 @@
   <body>
     <main class="popup">
       <h1>MirrorChat</h1>
-      <p class="desc">質問を入力して送信すると、ChatGPT / Claude / Gemini / Grok に順次送信し、Obsidian に保存します。</p>
+      <p class="desc">AIサイトを先に開いてから、質問を送信します。</p>
+
+      <section class="tab-status" id="tab-status">
+        <div class="tab-item" data-ai="chatgpt">
+          <span class="indicator" id="ind-chatgpt"></span>
+          <span class="tab-name">ChatGPT</span>
+        </div>
+        <div class="tab-item" data-ai="claude">
+          <span class="indicator" id="ind-claude"></span>
+          <span class="tab-name">Claude</span>
+        </div>
+        <div class="tab-item" data-ai="gemini">
+          <span class="indicator" id="ind-gemini"></span>
+          <span class="tab-name">Gemini</span>
+        </div>
+        <div class="tab-item" data-ai="grok">
+          <span class="indicator" id="ind-grok"></span>
+          <span class="tab-name">Grok</span>
+        </div>
+      </section>
+
+      <div class="actions">
+        <button id="open-tabs-button">サイトを開く</button>
+        <button id="close-tabs-button" disabled>サイトを閉じる</button>
+      </div>
+
       <label>
         質問
         <textarea id="prompt-input" rows="4" placeholder="ここに質問を入力..."></textarea>
       </label>
       <div class="actions">
-        <button id="send-button">送信</button>
+        <button id="send-button" disabled>送信</button>
         <a href="options.html" target="_blank" class="link">設定</a>
       </div>
       <p id="status" class="status" aria-live="polite"></p>

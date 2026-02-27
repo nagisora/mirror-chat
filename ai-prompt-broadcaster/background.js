@@ -10,7 +10,6 @@ const CONTENT_SCRIPTS = {
 const TASK_TIMEOUT_MS = 120000;
 const FAILED_ITEMS_KEY = "mirrorchatFailedItems";
 
-// 通知用のシンプルなアイコン（SVG の data URL）
 const NOTIFICATION_ICON_SVG =
   "<svg xmlns='http://www.w3.org/2000/svg' width='128' height='128'>" +
   "<rect width='128' height='128' fill='#111827'/>" +
@@ -22,6 +21,8 @@ const NOTIFICATION_ICON_SVG =
 const NOTIFICATION_ICON_URL =
   "data:image/svg+xml;charset=utf-8," + encodeURIComponent(NOTIFICATION_ICON_SVG);
 
+// 開いているAIタブを追跡: { chatgpt: tabId, claude: tabId, ... }
+const openTabs = {};
 const queue = [];
 let processing = false;
 
@@ -33,7 +34,7 @@ function getFolderName(question) {
 
 function buildSummary(results) {
   const parts = [];
-  for (const { ai, name, markdown } of results) {
+  for (const { name, markdown } of results) {
     parts.push(`## ${name}\n\n${markdown || "(取得できませんでした)"}\n\n`);
   }
   return parts.join("---\n\n");
@@ -72,13 +73,89 @@ async function saveFailedToLocal(payload) {
   await new Promise((r) => chrome.storage.local.set({ [FAILED_ITEMS_KEY]: items }, r));
 }
 
+function notifyAIStatus(ai, state) {
+  chrome.runtime.sendMessage?.({ type: "MIRRORCHAT_AI_STATUS", ai, state });
+}
+
+// タブが閉じられたら追跡から削除
+chrome.tabs.onRemoved.addListener((tabId) => {
+  for (const key of AI_KEYS) {
+    if (openTabs[key] === tabId) {
+      delete openTabs[key];
+      notifyAIStatus(key, "");
+      break;
+    }
+  }
+});
+
+async function openAITabs() {
+  const settings = await self.MirrorChatStorage.getSettings();
+  for (const aiKey of AI_KEYS) {
+    const cfg = settings.aiConfigs?.[aiKey];
+    const url = cfg?.url || "";
+    if (!url) continue;
+
+    // 既に開いているタブがあるか確認
+    if (openTabs[aiKey]) {
+      try {
+        await new Promise((resolve, reject) => {
+          chrome.tabs.get(openTabs[aiKey], (tab) => {
+            if (chrome.runtime.lastError || !tab) {
+              reject(new Error("tab not found"));
+            } else {
+              resolve(tab);
+            }
+          });
+        });
+        continue; // タブはまだ存在するのでスキップ
+      } catch {
+        delete openTabs[aiKey];
+      }
+    }
+
+    const tab = await new Promise((resolve) => {
+      chrome.tabs.create({ url, active: false }, (t) => {
+        if (chrome.runtime.lastError) {
+          resolve(null);
+        } else {
+          resolve(t);
+        }
+      });
+    });
+
+    if (tab) {
+      openTabs[aiKey] = tab.id;
+      notifyAIStatus(aiKey, "open");
+    }
+  }
+  return { ...openTabs };
+}
+
+function closeAITabs() {
+  for (const aiKey of AI_KEYS) {
+    if (openTabs[aiKey]) {
+      chrome.tabs.remove(openTabs[aiKey], () => {
+        void chrome.runtime.lastError;
+      });
+      delete openTabs[aiKey];
+      notifyAIStatus(aiKey, "");
+    }
+  }
+}
+
 async function processOneTask(aiKey, prompt, settings) {
   const cfg = settings.aiConfigs?.[aiKey];
-  const url = cfg?.url || "";
-  if (!url) return { ai: aiKey, name: cfg?.name || aiKey, markdown: "", error: "URL未設定" };
+  const tabId = openTabs[aiKey];
+
+  if (!tabId) {
+    return { ai: aiKey, name: cfg?.name || aiKey, markdown: "", error: "タブが開いていません" };
+  }
+
+  notifyAIStatus(aiKey, "sending");
 
   return new Promise((resolve) => {
     const timeoutId = setTimeout(() => {
+      notifyAIStatus(aiKey, "error");
       resolve({
         ai: aiKey,
         name: cfg?.name || aiKey,
@@ -87,31 +164,28 @@ async function processOneTask(aiKey, prompt, settings) {
       });
     }, TASK_TIMEOUT_MS);
 
-    chrome.tabs.create({ url, active: true }, (tab) => {
-      if (chrome.runtime.lastError) {
-        clearTimeout(timeoutId);
-        resolve({
-          ai: aiKey,
-          name: cfg?.name || aiKey,
-          markdown: "",
-          error: chrome.runtime.lastError.message
-        });
-        return;
-      }
+    chrome.scripting.executeScript(
+      { target: { tabId }, files: CONTENT_SCRIPTS[aiKey].files },
+      () => {
+        if (chrome.runtime.lastError) {
+          clearTimeout(timeoutId);
+          notifyAIStatus(aiKey, "error");
+          resolve({
+            ai: aiKey,
+            name: cfg?.name || aiKey,
+            markdown: "",
+            error: chrome.runtime.lastError.message
+          });
+          return;
+        }
 
-      const onUpdated = (id, info) => {
-        if (id !== tab.id || info.status !== "complete") return;
-        chrome.tabs.onUpdated.removeListener(onUpdated);
-
-        chrome.scripting.executeScript(
-          { target: { tabId: tab.id }, files: CONTENT_SCRIPTS[aiKey].files },
-          () => {
+        chrome.tabs.sendMessage(
+          tabId,
+          { type: "MIRRORCHAT_START", prompt, config: cfg },
+          (response) => {
+            clearTimeout(timeoutId);
             if (chrome.runtime.lastError) {
-              clearTimeout(timeoutId);
-              chrome.tabs.remove(tab.id, () => {
-                // すでにタブが閉じている場合のエラーは無視
-                void chrome.runtime.lastError;
-              });
+              notifyAIStatus(aiKey, "error");
               resolve({
                 ai: aiKey,
                 name: cfg?.name || aiKey,
@@ -120,39 +194,18 @@ async function processOneTask(aiKey, prompt, settings) {
               });
               return;
             }
-
-            chrome.tabs.sendMessage(
-              tab.id,
-              { type: "MIRRORCHAT_START", prompt, config: cfg },
-              (response) => {
-                clearTimeout(timeoutId);
-                chrome.tabs.remove(tab.id, () => {
-                  void chrome.runtime.lastError;
-                });
-                if (chrome.runtime.lastError) {
-                  resolve({
-                    ai: aiKey,
-                    name: cfg?.name || aiKey,
-                    markdown: "",
-                    error: chrome.runtime.lastError.message
-                  });
-                  return;
-                }
-                const data = response || {};
-                resolve({
-                  ai: aiKey,
-                  name: cfg?.name || aiKey,
-                  markdown: data.markdown || "",
-                  error: data.error
-                });
-              }
-            );
+            const data = response || {};
+            notifyAIStatus(aiKey, data.error ? "error" : "done");
+            resolve({
+              ai: aiKey,
+              name: cfg?.name || aiKey,
+              markdown: data.markdown || "",
+              error: data.error
+            });
           }
         );
-      };
-
-      chrome.tabs.onUpdated.addListener(onUpdated);
-    });
+      }
+    );
   });
 }
 
@@ -165,6 +218,17 @@ async function runTask(task) {
   } else {
     results = [];
     for (const aiKey of AI_KEYS) {
+      if (!openTabs[aiKey]) {
+        const cfg = settings.aiConfigs?.[aiKey];
+        results.push({
+          ai: aiKey,
+          name: cfg?.name || aiKey,
+          markdown: "",
+          error: "タブが開いていません"
+        });
+        notifyAIStatus(aiKey, "error");
+        continue;
+      }
       const r = await processOneTask(aiKey, task.prompt, settings);
       results.push(r);
     }
@@ -245,6 +309,41 @@ function processNext() {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === "MIRRORCHAT_OPEN_TABS") {
+    openAITabs().then((tabs) => {
+      sendResponse({ ok: true, openTabs: tabs });
+    });
+    return true;
+  }
+
+  if (msg.type === "MIRRORCHAT_CLOSE_TABS") {
+    closeAITabs();
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (msg.type === "MIRRORCHAT_GET_TAB_STATUS") {
+    // 開いているタブの状態を返す（ポップアップ再表示時の復帰用）
+    const validTabs = {};
+    const checks = AI_KEYS.map((key) => {
+      if (!openTabs[key]) return Promise.resolve();
+      return new Promise((resolve) => {
+        chrome.tabs.get(openTabs[key], (tab) => {
+          if (chrome.runtime.lastError || !tab) {
+            delete openTabs[key];
+          } else {
+            validTabs[key] = openTabs[key];
+          }
+          resolve();
+        });
+      });
+    });
+    Promise.all(checks).then(() => {
+      sendResponse({ openTabs: validTabs });
+    });
+    return true;
+  }
+
   if (msg.type === "MIRRORCHAT_SEND") {
     queue.push({ prompt: msg.prompt });
     if (!processing) processNext();
