@@ -10,6 +10,18 @@ const CONTENT_SCRIPTS = {
 const TASK_TIMEOUT_MS = 120000;
 const FAILED_ITEMS_KEY = "mirrorchatFailedItems";
 
+// 通知用のシンプルなアイコン（SVG の data URL）
+const NOTIFICATION_ICON_SVG =
+  "<svg xmlns='http://www.w3.org/2000/svg' width='128' height='128'>" +
+  "<rect width='128' height='128' fill='#111827'/>" +
+  "<rect x='20' y='36' width='88' height='56' rx='8' fill='#1f2937' stroke='#4b5563' stroke-width='2'/>" +
+  "<circle cx='44' cy='64' r='10' fill='#22c55e'/>" +
+  "<rect x='62' y='54' width='30' height='6' rx='3' fill='#e5e7eb'/>" +
+  "<rect x='62' y='66' width='24' height='6' rx='3' fill='#9ca3af'/>" +
+  "</svg>";
+const NOTIFICATION_ICON_URL =
+  "data:image/svg+xml;charset=utf-8," + encodeURIComponent(NOTIFICATION_ICON_SVG);
+
 const queue = [];
 let processing = false;
 
@@ -96,7 +108,10 @@ async function processOneTask(aiKey, prompt, settings) {
           () => {
             if (chrome.runtime.lastError) {
               clearTimeout(timeoutId);
-              chrome.tabs.remove(tab.id);
+              chrome.tabs.remove(tab.id, () => {
+                // すでにタブが閉じている場合のエラーは無視
+                void chrome.runtime.lastError;
+              });
               resolve({
                 ai: aiKey,
                 name: cfg?.name || aiKey,
@@ -111,7 +126,9 @@ async function processOneTask(aiKey, prompt, settings) {
               { type: "MIRRORCHAT_START", prompt, config: cfg },
               (response) => {
                 clearTimeout(timeoutId);
-                chrome.tabs.remove(tab.id);
+                chrome.tabs.remove(tab.id, () => {
+                  void chrome.runtime.lastError;
+                });
                 if (chrome.runtime.lastError) {
                   resolve({
                     ai: aiKey,
@@ -161,25 +178,52 @@ async function runTask(task) {
       error: saveResult.error
     });
     const failed = results.filter((r) => r.error).map((r) => r.name);
-    chrome.notifications.create({
-      type: "basic",
-      title: "MirrorChat: 一部失敗",
-      message: `Obsidian保存失敗。失敗: ${failed.join(", ")}。再送可能です。`
-    });
+    chrome.notifications.create(
+      "",
+      {
+        type: "basic",
+        iconUrl: NOTIFICATION_ICON_URL,
+        title: "MirrorChat: 一部失敗",
+        message: `Obsidian保存失敗。失敗: ${failed.join(", ")}。再送可能です。`
+      },
+      () => {
+        if (chrome.runtime.lastError) {
+          console.error("MirrorChat notification error:", chrome.runtime.lastError.message);
+        }
+      }
+    );
   } else {
     const failed = results.filter((r) => r.error).map((r) => r.name);
     if (failed.length > 0) {
-      chrome.notifications.create({
-        type: "basic",
-        title: "MirrorChat: 一部失敗",
-        message: `取得失敗: ${failed.join(", ")}。Obsidianには保存済みです。`
-      });
+      chrome.notifications.create(
+        "",
+        {
+          type: "basic",
+          iconUrl: NOTIFICATION_ICON_URL,
+          title: "MirrorChat: 一部失敗",
+          message: `取得失敗: ${failed.join(", ")}。Obsidianには保存済みです。`
+        },
+        () => {
+          if (chrome.runtime.lastError) {
+            console.error("MirrorChat notification error:", chrome.runtime.lastError.message);
+          }
+        }
+      );
     } else {
-      chrome.notifications.create({
-        type: "basic",
-        title: "MirrorChat: 完了",
-        message: "4つのAIから回答を取得し、Obsidianに保存しました。"
-      });
+      chrome.notifications.create(
+        "",
+        {
+          type: "basic",
+          iconUrl: NOTIFICATION_ICON_URL,
+          title: "MirrorChat: 完了",
+          message: "4つのAIから回答を取得し、Obsidianに保存しました。"
+        },
+        () => {
+          if (chrome.runtime.lastError) {
+            console.error("MirrorChat notification error:", chrome.runtime.lastError.message);
+          }
+        }
+      );
     }
   }
 
