@@ -2,7 +2,10 @@
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type !== "MIRRORCHAT_START") return;
     const cfg = msg.config || {};
-    const inputSel = cfg.inputSelector || ".ProseMirror[contenteditable='true'], div[contenteditable='true'], fieldset textarea, textarea";
+    // Claude: Tiptap (ProseMirror) ベースの contenteditable
+    const inputSel = cfg.inputSelector || "div[data-testid='chat-input'], div.tiptap.ProseMirror[contenteditable='true'], .ProseMirror[contenteditable='true']";
+    // 送信ボタン: Button_claude クラスで特定（aria-label はロケール依存のため使わない）
+    const submitSel = cfg.submitButtonSelector || "button[class*='Button_claude'], div.shrink-0 button[aria-label]";
     const answerSel = cfg.answerContainerSelector || "[data-testid='conversation-thread'], main, [class*='message']";
 
     (async () => {
@@ -18,8 +21,8 @@
 
         await (utils.humanDelay ? utils.humanDelay(2000, 3500) : new Promise((r) => setTimeout(r, 2500)));
 
-        // Claude は Enter キーで送信する
-        utils.pressEnterToSubmit(input);
+        // ボタンクリックを優先、フォールバックで Enter
+        await utils.clickSubmitOrEnter(submitSel, input);
 
         if (utils.waitForStable) {
           await utils.waitForStable(answerSel, 3000);

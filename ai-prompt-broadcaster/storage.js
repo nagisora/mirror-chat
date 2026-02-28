@@ -11,16 +11,16 @@
       chatgpt: {
         name: "ChatGPT",
         url: "https://chat.openai.com/",
-        inputSelector: "#prompt-textarea, textarea[data-id='root'], textarea",
-        submitButtonSelector: "button[data-testid='send-button'], button[data-testid='send'], form button[type='submit']",
+        inputSelector: "div#prompt-textarea, div.ProseMirror[contenteditable='true']",
+        submitButtonSelector: "button#composer-submit-button, button[data-testid='send-button']",
         answerContainerSelector: "main div[data-testid='conversation-turns'], main",
         doneCheckSelector: "button[data-testid='stop-button']"
       },
       claude: {
         name: "Claude",
         url: "https://claude.ai/",
-        inputSelector: ".ProseMirror[contenteditable='true'], div[contenteditable='true'], textarea",
-        submitButtonSelector: "button[aria-label='Send Message'], button[type='submit'], fieldset button:last-of-type",
+        inputSelector: "div[data-testid='chat-input'], div.tiptap.ProseMirror[contenteditable='true'], .ProseMirror[contenteditable='true']",
+        submitButtonSelector: "button[class*='Button_claude'], div.shrink-0 button[aria-label]",
         answerContainerSelector: "[data-testid='conversation-thread'], main",
         doneCheckSelector: ""
       },

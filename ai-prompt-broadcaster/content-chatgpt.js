@@ -2,8 +2,11 @@
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type !== "MIRRORCHAT_START") return;
     const cfg = msg.config || {};
-    const inputSel = cfg.inputSelector || "#prompt-textarea, textarea[data-id='root'], div[contenteditable='true'][id*='prompt'], textarea";
-    const submitSel = cfg.submitButtonSelector || "button[data-testid='send-button'], button[data-testid='send'], form button[type='submit']";
+    // 重要: 非表示の <textarea name="prompt-textarea" style="display:none"> を避け、
+    // ProseMirror の contenteditable div を確実に取得する
+    const inputSel = cfg.inputSelector || "div#prompt-textarea, div.ProseMirror[contenteditable='true']";
+    // 送信ボタンは id="composer-submit-button" で特定可能
+    const submitSel = cfg.submitButtonSelector || "button#composer-submit-button, button[data-testid='send-button']";
     const answerSel = cfg.answerContainerSelector || "main div[data-testid='conversation-turns'], main";
 
     (async () => {
@@ -19,8 +22,8 @@
 
         await (utils.humanDelay ? utils.humanDelay(2000, 3500) : new Promise((r) => setTimeout(r, 2500)));
 
-        // まず Enter キーで送信を試み、ダメならボタンクリック
-        utils.pressEnterToSubmit(input);
+        // ボタンクリックを優先、フォールバックで Enter
+        await utils.clickSubmitOrEnter(submitSel, input);
 
         if (utils.waitForStable) {
           await utils.waitForStable(answerSel, 3000);
