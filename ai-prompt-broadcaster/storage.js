@@ -11,33 +11,33 @@
       chatgpt: {
         name: "ChatGPT",
         url: "https://chat.openai.com/",
-        inputSelector: "textarea[data-id='root']",
-        submitButtonSelector: "button[data-testid='send-button'], button[data-testid='send']",
-        answerContainerSelector: "main div[data-testid='conversation-turns']",
+        inputSelector: "#prompt-textarea, textarea[data-id='root'], textarea",
+        submitButtonSelector: "button[data-testid='send-button'], button[data-testid='send'], form button[type='submit']",
+        answerContainerSelector: "main div[data-testid='conversation-turns'], main",
         doneCheckSelector: "button[data-testid='stop-button']"
       },
       claude: {
         name: "Claude",
         url: "https://claude.ai/",
-        inputSelector: "textarea",
-        submitButtonSelector: "button[type='submit']",
-        answerContainerSelector: "[data-testid='conversation-thread']",
+        inputSelector: ".ProseMirror[contenteditable='true'], div[contenteditable='true'], textarea",
+        submitButtonSelector: "button[aria-label='Send Message'], button[type='submit'], fieldset button:last-of-type",
+        answerContainerSelector: "[data-testid='conversation-thread'], main",
         doneCheckSelector: ""
       },
       gemini: {
         name: "Gemini",
         url: "https://gemini.google.com/app",
-        inputSelector: "textarea, div[contenteditable='true']",
-        submitButtonSelector: "button[type='submit']",
+        inputSelector: "rich-textarea div[contenteditable='true'], div[contenteditable='true'], textarea",
+        submitButtonSelector: "button.send-button, button[aria-label='Send message'], button[type='submit']",
         answerContainerSelector: "main",
         doneCheckSelector: ""
       },
       grok: {
         name: "Grok",
         url: "https://grok.com/",
-        inputSelector: "textarea, div[contenteditable='true']",
-        submitButtonSelector: "button[type='submit']",
-        answerContainerSelector: "main",
+        inputSelector: "div[contenteditable='true'], textarea",
+        submitButtonSelector: "button[type='submit'], button[aria-label='Send'], form button",
+        answerContainerSelector: "main, article",
         doneCheckSelector: ""
       }
     }

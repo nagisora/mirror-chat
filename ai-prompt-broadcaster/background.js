@@ -10,16 +10,7 @@ const CONTENT_SCRIPTS = {
 const TASK_TIMEOUT_MS = 120000;
 const FAILED_ITEMS_KEY = "mirrorchatFailedItems";
 
-const NOTIFICATION_ICON_SVG =
-  "<svg xmlns='http://www.w3.org/2000/svg' width='128' height='128'>" +
-  "<rect width='128' height='128' fill='#111827'/>" +
-  "<rect x='20' y='36' width='88' height='56' rx='8' fill='#1f2937' stroke='#4b5563' stroke-width='2'/>" +
-  "<circle cx='44' cy='64' r='10' fill='#22c55e'/>" +
-  "<rect x='62' y='54' width='30' height='6' rx='3' fill='#e5e7eb'/>" +
-  "<rect x='62' y='66' width='24' height='6' rx='3' fill='#9ca3af'/>" +
-  "</svg>";
-const NOTIFICATION_ICON_URL =
-  "data:image/svg+xml;charset=utf-8," + encodeURIComponent(NOTIFICATION_ICON_SVG);
+const NOTIFICATION_ICON_URL = chrome.runtime.getURL("icon128.png");
 
 // 開いているAIタブを追跡: { chatgpt: tabId, claude: tabId, ... }
 const openTabs = {};

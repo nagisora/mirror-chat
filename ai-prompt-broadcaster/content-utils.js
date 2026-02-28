@@ -52,8 +52,6 @@ function waitFor(selector, timeout = 10000) {
   });
 }
 
-window.MirrorChatUtils = { htmlToMarkdown, waitFor };
-
 function waitForStable(containerSelector, stableMs = 3000) {
   return new Promise((resolve) => {
     let timer;
@@ -77,4 +75,81 @@ function waitForStable(containerSelector, stableMs = 3000) {
   });
 }
 
-window.MirrorChatUtils.waitForStable = waitForStable;
+/**
+ * React / フレームワーク対応のテキスト入力シミュレーション
+ * 単に .value や .innerText を設定するだけでは React の内部状態が更新されない。
+ * native setter や execCommand を使って正しくイベントを発火させる。
+ */
+function simulateInput(element, text) {
+  element.focus();
+
+  const isContentEditable =
+    element.isContentEditable || element.getAttribute("contenteditable") === "true";
+
+  if (isContentEditable) {
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    sel.removeAllRanges();
+    sel.addRange(range);
+
+    const inserted = document.execCommand("insertText", false, text);
+    if (!inserted || !element.textContent.includes(text)) {
+      element.textContent = text;
+      element.dispatchEvent(new InputEvent("input", {
+        bubbles: true, inputType: "insertText", data: text
+      }));
+    }
+  } else {
+    // textarea / input — React の native setter trick
+    const proto = element.tagName === "TEXTAREA"
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+    const nativeSetter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+    if (nativeSetter) {
+      nativeSetter.call(element, text);
+    } else {
+      element.value = text;
+    }
+    element.dispatchEvent(new InputEvent("input", {
+      bubbles: true, inputType: "insertText", data: text
+    }));
+  }
+
+  element.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+/**
+ * 送信ボタンが有効になるのを待ってクリック。
+ * フレームワークが入力を検知→再レンダリング→ボタン有効化 の遅延に対応。
+ * ボタンが見つからない/無効のままの場合は Enter キーでフォールバック送信。
+ */
+async function clickSubmitOrEnter(submitSelector, inputElement, timeout = 5000) {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    const btn = document.querySelector(submitSelector);
+    if (btn && !btn.disabled && !btn.getAttribute("aria-disabled")) {
+      btn.click();
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+
+  // フォールバック: Enter キーで送信
+  if (inputElement) {
+    inputElement.focus();
+    inputElement.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true
+    }));
+    return true;
+  }
+  return false;
+}
+
+window.MirrorChatUtils = {
+  htmlToMarkdown,
+  waitFor,
+  waitForStable,
+  simulateInput,
+  clickSubmitOrEnter
+};
