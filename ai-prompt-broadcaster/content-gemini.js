@@ -2,8 +2,9 @@
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type !== "MIRRORCHAT_START") return;
     const cfg = msg.config || {};
-    const inputSel = cfg.inputSelector || "rich-textarea div[contenteditable='true'], div[contenteditable='true'], textarea";
-    const submitSel = cfg.submitButtonSelector || "button.send-button, button[aria-label='Send message'], button[type='submit'], mat-icon-button";
+    // Gemini: rich-textarea 内の contenteditable、または Quill-like エディタ
+    const inputSel = cfg.inputSelector || "rich-textarea div[contenteditable='true'], div.ql-editor[contenteditable='true'], div[contenteditable='true'], textarea";
+    const submitSel = cfg.submitButtonSelector || "button.send-button, button[aria-label='Send message'], button[mat-icon-button], button[type='submit']";
     const answerSel = cfg.answerContainerSelector || "main, [data-model-id]";
 
     (async () => {
@@ -15,26 +16,11 @@
           return;
         }
 
-        if (utils.simulateInput) {
-          utils.simulateInput(input, msg.prompt);
-        } else {
-          input.focus();
-          if (input.isContentEditable || input.getAttribute("contenteditable") === "true") {
-            input.innerText = msg.prompt;
-          } else {
-            input.value = msg.prompt;
-          }
-          input.dispatchEvent(new Event("input", { bubbles: true }));
-        }
+        utils.simulateInput(input, msg.prompt);
 
-        await new Promise((r) => setTimeout(r, 500));
+        await (utils.humanDelay ? utils.humanDelay(2000, 3500) : new Promise((r) => setTimeout(r, 2500)));
 
-        if (utils.clickSubmitOrEnter) {
-          await utils.clickSubmitOrEnter(submitSel, input);
-        } else {
-          const submit = document.querySelector(submitSel);
-          if (submit && !submit.disabled) submit.click();
-        }
+        await utils.clickSubmitOrEnter(submitSel, input);
 
         if (utils.waitForStable) {
           await utils.waitForStable(answerSel, 3000);

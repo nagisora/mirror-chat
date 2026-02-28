@@ -1,6 +1,9 @@
 /**
  * DOM からテキスト抽出・Markdown 変換の共通ユーティリティ
  * 各 content script から参照される
+ *
+ * 参考: pykrete67/prompt-queue-extension の common.js
+ *       repmax/ai-chat-downloader の Markdown 変換
  */
 function htmlToMarkdown(container) {
   if (!container) return "";
@@ -76,44 +79,97 @@ function waitForStable(containerSelector, stableMs = 3000) {
 }
 
 /**
- * React / フレームワーク対応のテキスト入力シミュレーション
- * 単に .value や .innerText を設定するだけでは React の内部状態が更新されない。
- * native setter や execCommand を使って正しくイベントを発火させる。
+ * 人間らしいランダム遅延（bot判定回避）
+ */
+function humanDelay(minMs = 1500, maxMs = 3000) {
+  const ms = minMs + Math.random() * (maxMs - minMs);
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * キーボードイベントシーケンスを発火（focus → click → key events）
+ * prompt-queue-extension の simulateInput を参考にした人間らしい入力
+ */
+function dispatchKeySequence(element, key) {
+  const opts = { key, bubbles: true, cancelable: true };
+  element.dispatchEvent(new KeyboardEvent("keydown", opts));
+  element.dispatchEvent(new KeyboardEvent("keypress", opts));
+  element.dispatchEvent(new InputEvent("beforeinput", {
+    bubbles: true, cancelable: true, inputType: "insertText", data: key
+  }));
+  element.dispatchEvent(new InputEvent("input", {
+    bubbles: true, inputType: "insertText", data: key
+  }));
+  element.dispatchEvent(new KeyboardEvent("keyup", opts));
+}
+
+/**
+ * React / ProseMirror / フレームワーク対応のテキスト入力シミュレーション
+ *
+ * 手法:
+ * 1. contenteditable (ProseMirror等): execCommand + フルイベントシーケンス
+ * 2. textarea (React等): DataTransfer を使った paste シミュレーション
+ * 3. フォールバック: native setter + InputEvent
  */
 function simulateInput(element, text) {
   element.focus();
+  element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
   const isContentEditable =
     element.isContentEditable || element.getAttribute("contenteditable") === "true";
 
   if (isContentEditable) {
+    // ProseMirror / contenteditable 用
+    // 既存テキストを全選択してから置換
     const sel = window.getSelection();
     const range = document.createRange();
     range.selectNodeContents(element);
     sel.removeAllRanges();
     sel.addRange(range);
+    document.execCommand("delete", false);
 
+    // execCommand で挿入（ブラウザがネイティブに InputEvent を発火する）
     const inserted = document.execCommand("insertText", false, text);
+
     if (!inserted || !element.textContent.includes(text)) {
+      // フォールバック: 直接設定 + イベント発火
       element.textContent = text;
+
+      // カーソルを末尾に移動
+      const r2 = document.createRange();
+      r2.selectNodeContents(element);
+      r2.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(r2);
+
+      dispatchKeySequence(element, text.slice(-1));
+    }
+  } else {
+    // textarea / input 用 — DataTransfer paste シミュレーション
+    element.select();
+
+    const dt = new DataTransfer();
+    dt.setData("text/plain", text);
+    const pasteEvent = new ClipboardEvent("paste", {
+      bubbles: true, cancelable: true, clipboardData: dt
+    });
+    const handled = element.dispatchEvent(pasteEvent);
+
+    // paste が処理されなかった場合、native setter フォールバック
+    if (!handled || element.value !== text) {
+      const proto = element.tagName === "TEXTAREA"
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype;
+      const nativeSetter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+      if (nativeSetter) {
+        nativeSetter.call(element, text);
+      } else {
+        element.value = text;
+      }
       element.dispatchEvent(new InputEvent("input", {
         bubbles: true, inputType: "insertText", data: text
       }));
     }
-  } else {
-    // textarea / input — React の native setter trick
-    const proto = element.tagName === "TEXTAREA"
-      ? HTMLTextAreaElement.prototype
-      : HTMLInputElement.prototype;
-    const nativeSetter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
-    if (nativeSetter) {
-      nativeSetter.call(element, text);
-    } else {
-      element.value = text;
-    }
-    element.dispatchEvent(new InputEvent("input", {
-      bubbles: true, inputType: "insertText", data: text
-    }));
   }
 
   element.dispatchEvent(new Event("change", { bubbles: true }));
@@ -121,26 +177,38 @@ function simulateInput(element, text) {
 
 /**
  * 送信ボタンが有効になるのを待ってクリック。
- * フレームワークが入力を検知→再レンダリング→ボタン有効化 の遅延に対応。
+ * 人間らしい遅延を入れてから送信する。
  * ボタンが見つからない/無効のままの場合は Enter キーでフォールバック送信。
  */
-async function clickSubmitOrEnter(submitSelector, inputElement, timeout = 5000) {
+async function clickSubmitOrEnter(submitSelector, inputElement, timeout = 8000) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
-    const btn = document.querySelector(submitSelector);
-    if (btn && !btn.disabled && !btn.getAttribute("aria-disabled")) {
-      btn.click();
-      return true;
+    // セレクタをカンマ区切りで複数試行
+    const selectors = submitSelector.split(",").map((s) => s.trim());
+    for (const sel of selectors) {
+      try {
+        const btn = document.querySelector(sel);
+        if (btn && !btn.disabled && btn.getAttribute("aria-disabled") !== "true") {
+          btn.scrollIntoView({ block: "center" });
+          await new Promise((r) => setTimeout(r, 100));
+          btn.click();
+          return true;
+        }
+      } catch { /* セレクタが不正な場合は無視 */ }
     }
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 300));
   }
 
   // フォールバック: Enter キーで送信
   if (inputElement) {
     inputElement.focus();
-    inputElement.dispatchEvent(new KeyboardEvent("keydown", {
-      key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true
-    }));
+    const enterOpts = {
+      key: "Enter", code: "Enter", keyCode: 13, which: 13,
+      bubbles: true, cancelable: true
+    };
+    inputElement.dispatchEvent(new KeyboardEvent("keydown", enterOpts));
+    inputElement.dispatchEvent(new KeyboardEvent("keypress", enterOpts));
+    inputElement.dispatchEvent(new KeyboardEvent("keyup", enterOpts));
     return true;
   }
   return false;
@@ -150,6 +218,7 @@ window.MirrorChatUtils = {
   htmlToMarkdown,
   waitFor,
   waitForStable,
+  humanDelay,
   simulateInput,
   clickSubmitOrEnter
 };

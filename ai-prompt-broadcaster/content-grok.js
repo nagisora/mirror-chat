@@ -15,26 +15,11 @@
           return;
         }
 
-        if (utils.simulateInput) {
-          utils.simulateInput(input, msg.prompt);
-        } else {
-          input.focus();
-          if (input.isContentEditable || input.getAttribute("contenteditable") === "true") {
-            input.innerText = msg.prompt;
-          } else {
-            input.value = msg.prompt;
-          }
-          input.dispatchEvent(new Event("input", { bubbles: true }));
-        }
+        utils.simulateInput(input, msg.prompt);
 
-        await new Promise((r) => setTimeout(r, 500));
+        await (utils.humanDelay ? utils.humanDelay(2000, 3500) : new Promise((r) => setTimeout(r, 2500)));
 
-        if (utils.clickSubmitOrEnter) {
-          await utils.clickSubmitOrEnter(submitSel, input);
-        } else {
-          const submit = document.querySelector(submitSel);
-          if (submit && !submit.disabled) submit.click();
-        }
+        await utils.clickSubmitOrEnter(submitSel, input);
 
         if (utils.waitForStable) {
           await utils.waitForStable(answerSel, 4000);

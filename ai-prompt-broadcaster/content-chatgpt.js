@@ -2,7 +2,7 @@
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type !== "MIRRORCHAT_START") return;
     const cfg = msg.config || {};
-    const inputSel = cfg.inputSelector || "#prompt-textarea, textarea[data-id='root'], textarea";
+    const inputSel = cfg.inputSelector || "#prompt-textarea, textarea[data-id='root'], div[contenteditable='true'][id*='prompt'], textarea";
     const submitSel = cfg.submitButtonSelector || "button[data-testid='send-button'], button[data-testid='send'], form button[type='submit']";
     const answerSel = cfg.answerContainerSelector || "main div[data-testid='conversation-turns'], main";
 
@@ -15,22 +15,12 @@
           return;
         }
 
-        if (utils.simulateInput) {
-          utils.simulateInput(input, msg.prompt);
-        } else {
-          input.focus();
-          input.value = msg.prompt;
-          input.dispatchEvent(new Event("input", { bubbles: true }));
-        }
+        utils.simulateInput(input, msg.prompt);
 
-        await new Promise((r) => setTimeout(r, 500));
+        // 人間らしい遅延: 入力後すぐにボタンを押さない（bot判定回避）
+        await (utils.humanDelay ? utils.humanDelay(2000, 3500) : new Promise((r) => setTimeout(r, 2500)));
 
-        if (utils.clickSubmitOrEnter) {
-          await utils.clickSubmitOrEnter(submitSel, input);
-        } else {
-          const submit = document.querySelector(submitSel);
-          if (submit && !submit.disabled) submit.click();
-        }
+        await utils.clickSubmitOrEnter(submitSel, input);
 
         if (utils.waitForStable) {
           await utils.waitForStable(answerSel, 3000);
