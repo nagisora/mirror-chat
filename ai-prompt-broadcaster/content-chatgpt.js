@@ -17,10 +17,10 @@
 
         utils.simulateInput(input, msg.prompt);
 
-        // 人間らしい遅延: 入力後すぐにボタンを押さない（bot判定回避）
         await (utils.humanDelay ? utils.humanDelay(2000, 3500) : new Promise((r) => setTimeout(r, 2500)));
 
-        await utils.clickSubmitOrEnter(submitSel, input);
+        // まず Enter キーで送信を試み、ダメならボタンクリック
+        utils.pressEnterToSubmit(input);
 
         if (utils.waitForStable) {
           await utils.waitForStable(answerSel, 3000);

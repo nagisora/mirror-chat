@@ -3,7 +3,6 @@
     if (msg.type !== "MIRRORCHAT_START") return;
     const cfg = msg.config || {};
     const inputSel = cfg.inputSelector || "div[contenteditable='true'], textarea";
-    const submitSel = cfg.submitButtonSelector || "button[type='submit'], button[aria-label='Send'], form button";
     const answerSel = cfg.answerContainerSelector || "main, article";
 
     (async () => {
@@ -19,7 +18,8 @@
 
         await (utils.humanDelay ? utils.humanDelay(2000, 3500) : new Promise((r) => setTimeout(r, 2500)));
 
-        await utils.clickSubmitOrEnter(submitSel, input);
+        // Grok は Enter キーで送信する
+        utils.pressEnterToSubmit(input);
 
         if (utils.waitForStable) {
           await utils.waitForStable(answerSel, 4000);

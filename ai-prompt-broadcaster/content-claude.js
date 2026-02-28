@@ -2,9 +2,7 @@
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type !== "MIRRORCHAT_START") return;
     const cfg = msg.config || {};
-    // Claude: ProseMirror ベースの contenteditable エディタ
     const inputSel = cfg.inputSelector || ".ProseMirror[contenteditable='true'], div[contenteditable='true'], fieldset textarea, textarea";
-    const submitSel = cfg.submitButtonSelector || "button[aria-label='Send Message'], fieldset button:last-of-type, button[type='submit']";
     const answerSel = cfg.answerContainerSelector || "[data-testid='conversation-thread'], main, [class*='message']";
 
     (async () => {
@@ -20,7 +18,8 @@
 
         await (utils.humanDelay ? utils.humanDelay(2000, 3500) : new Promise((r) => setTimeout(r, 2500)));
 
-        await utils.clickSubmitOrEnter(submitSel, input);
+        // Claude は Enter キーで送信する
+        utils.pressEnterToSubmit(input);
 
         if (utils.waitForStable) {
           await utils.waitForStable(answerSel, 3000);

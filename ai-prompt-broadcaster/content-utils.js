@@ -106,10 +106,13 @@ function dispatchKeySequence(element, key) {
 /**
  * React / ProseMirror / フレームワーク対応のテキスト入力シミュレーション
  *
- * 手法:
- * 1. contenteditable (ProseMirror等): execCommand + フルイベントシーケンス
- * 2. textarea (React等): DataTransfer を使った paste シミュレーション
- * 3. フォールバック: native setter + InputEvent
+ * ProseMirror (ChatGPT, Claude) では execCommand("insertText") が効かない。
+ * ClipboardEvent("paste") を使うと ProseMirror が自前で処理してくれる。
+ *
+ * 手法の優先順:
+ * 1. ClipboardEvent paste（ProseMirror/contenteditable で最も確実）
+ * 2. execCommand("insertText")（一部の contenteditable 用フォールバック）
+ * 3. native setter + InputEvent（React textarea 用）
  */
 function simulateInput(element, text) {
   element.focus();
@@ -120,7 +123,7 @@ function simulateInput(element, text) {
 
   if (isContentEditable) {
     // ProseMirror / contenteditable 用
-    // 既存テキストを全選択してから置換
+    // 既存テキストを全選択してから削除
     const sel = window.getSelection();
     const range = document.createRange();
     range.selectNodeContents(element);
@@ -128,51 +131,64 @@ function simulateInput(element, text) {
     sel.addRange(range);
     document.execCommand("delete", false);
 
-    // execCommand で挿入（ブラウザがネイティブに InputEvent を発火する）
-    const inserted = document.execCommand("insertText", false, text);
+    // 手法1: ClipboardEvent paste（ProseMirror はこれを自前で処理する）
+    const dt = new DataTransfer();
+    dt.setData("text/plain", text);
+    element.dispatchEvent(new ClipboardEvent("paste", {
+      bubbles: true, cancelable: true, clipboardData: dt
+    }));
 
-    if (!inserted || !element.textContent.includes(text)) {
-      // フォールバック: 直接設定 + イベント発火
+    // paste で入力されたか確認
+    if (!element.textContent.includes(text)) {
+      // 手法2: execCommand("insertText") フォールバック
+      document.execCommand("insertText", false, text);
+    }
+
+    if (!element.textContent.includes(text)) {
+      // 手法3: 直接設定 + イベント発火
       element.textContent = text;
-
-      // カーソルを末尾に移動
       const r2 = document.createRange();
       r2.selectNodeContents(element);
       r2.collapse(false);
       sel.removeAllRanges();
       sel.addRange(r2);
-
       dispatchKeySequence(element, text.slice(-1));
     }
   } else {
-    // textarea / input 用 — DataTransfer paste シミュレーション
+    // textarea / input 用
     element.select();
 
-    const dt = new DataTransfer();
-    dt.setData("text/plain", text);
-    const pasteEvent = new ClipboardEvent("paste", {
-      bubbles: true, cancelable: true, clipboardData: dt
-    });
-    const handled = element.dispatchEvent(pasteEvent);
-
-    // paste が処理されなかった場合、native setter フォールバック
-    if (!handled || element.value !== text) {
-      const proto = element.tagName === "TEXTAREA"
-        ? HTMLTextAreaElement.prototype
-        : HTMLInputElement.prototype;
-      const nativeSetter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
-      if (nativeSetter) {
-        nativeSetter.call(element, text);
-      } else {
-        element.value = text;
-      }
-      element.dispatchEvent(new InputEvent("input", {
-        bubbles: true, inputType: "insertText", data: text
-      }));
+    // 手法1: native setter（React で最も確実）
+    const proto = element.tagName === "TEXTAREA"
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+    const nativeSetter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+    if (nativeSetter) {
+      nativeSetter.call(element, text);
+    } else {
+      element.value = text;
     }
+    element.dispatchEvent(new InputEvent("input", {
+      bubbles: true, inputType: "insertText", data: text
+    }));
   }
 
   element.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+/**
+ * Enter キーで送信する。
+ * Claude, Grok など Enter で送信するサービス用。
+ */
+function pressEnterToSubmit(element) {
+  element.focus();
+  const opts = {
+    key: "Enter", code: "Enter", keyCode: 13, which: 13,
+    bubbles: true, cancelable: true
+  };
+  element.dispatchEvent(new KeyboardEvent("keydown", opts));
+  element.dispatchEvent(new KeyboardEvent("keypress", opts));
+  element.dispatchEvent(new KeyboardEvent("keyup", opts));
 }
 
 /**
@@ -220,5 +236,6 @@ window.MirrorChatUtils = {
   waitForStable,
   humanDelay,
   simulateInput,
+  pressEnterToSubmit,
   clickSubmitOrEnter
 };
