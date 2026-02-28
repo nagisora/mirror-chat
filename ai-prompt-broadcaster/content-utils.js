@@ -106,59 +106,51 @@ function dispatchKeySequence(element, key) {
 /**
  * React / ProseMirror / フレームワーク対応のテキスト入力シミュレーション
  *
- * ProseMirror (ChatGPT, Claude) では execCommand("insertText") が効かない。
- * ClipboardEvent("paste") を使うと ProseMirror が自前で処理してくれる。
+ * ChatGPT の ProseMirror で実際に動作確認済みの手法:
+ *   el.focus() → execCommand('selectAll') → execCommand('insertText', false, text)
  *
- * 手法の優先順:
- * 1. ClipboardEvent paste（ProseMirror/contenteditable で最も確実）
- * 2. execCommand("insertText")（一部の contenteditable 用フォールバック）
- * 3. native setter + InputEvent（React textarea 用）
+ * 重要: execCommand("delete") は ProseMirror の内部状態を壊すため使わない。
+ *        selectAll で選択 → insertText で置換するのが正しいパターン。
  */
 function simulateInput(element, text) {
   element.focus();
-  element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
   const isContentEditable =
     element.isContentEditable || element.getAttribute("contenteditable") === "true";
 
   if (isContentEditable) {
-    // ProseMirror / contenteditable 用
-    // 既存テキストを全選択してから削除
-    const sel = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    sel.removeAllRanges();
-    sel.addRange(range);
-    document.execCommand("delete", false);
+    // ProseMirror / Tiptap / contenteditable 用
+    // selectAll → insertText で既存テキストを置換（delete は使わない）
+    document.execCommand("selectAll", false);
+    document.execCommand("insertText", false, text);
 
-    // 手法1: ClipboardEvent paste（ProseMirror はこれを自前で処理する）
-    const dt = new DataTransfer();
-    dt.setData("text/plain", text);
-    element.dispatchEvent(new ClipboardEvent("paste", {
-      bubbles: true, cancelable: true, clipboardData: dt
-    }));
-
-    // paste で入力されたか確認
     if (!element.textContent.includes(text)) {
-      // 手法2: execCommand("insertText") フォールバック
-      document.execCommand("insertText", false, text);
+      // フォールバック: ClipboardEvent paste
+      const dt = new DataTransfer();
+      dt.setData("text/plain", text);
+      element.dispatchEvent(new ClipboardEvent("paste", {
+        bubbles: true, cancelable: true, clipboardData: dt
+      }));
     }
 
     if (!element.textContent.includes(text)) {
-      // 手法3: 直接設定 + イベント発火
+      // 最終フォールバック: 直接設定 + イベント発火
       element.textContent = text;
-      const r2 = document.createRange();
-      r2.selectNodeContents(element);
-      r2.collapse(false);
+      const sel = window.getSelection();
+      const r = document.createRange();
+      r.selectNodeContents(element);
+      r.collapse(false);
       sel.removeAllRanges();
-      sel.addRange(r2);
-      dispatchKeySequence(element, text.slice(-1));
+      sel.addRange(r);
+      element.dispatchEvent(new InputEvent("input", {
+        bubbles: true, inputType: "insertText", data: text
+      }));
     }
   } else {
     // textarea / input 用
     element.select();
 
-    // 手法1: native setter（React で最も確実）
+    // native setter（React で最も確実）
     const proto = element.tagName === "TEXTAREA"
       ? HTMLTextAreaElement.prototype
       : HTMLInputElement.prototype;
