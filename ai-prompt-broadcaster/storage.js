@@ -34,7 +34,7 @@
       },
       grok: {
         name: "Grok",
-        url: "https://x.com/i/grok",
+        url: "https://grok.com/",
         inputSelector: "textarea, div[contenteditable='true']",
         submitButtonSelector: "button[type='submit']",
         answerContainerSelector: "main",

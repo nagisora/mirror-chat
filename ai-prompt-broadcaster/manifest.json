@@ -21,7 +21,6 @@
     "*://chat.openai.com/*",
     "*://claude.ai/*",
     "*://gemini.google.com/*",
-    "*://x.com/*",
     "*://grok.com/*",
     "http://127.0.0.1/*",
     "http://localhost/*"
