@@ -7,6 +7,7 @@
     const submitSel = cfg.submitButtonSelector || "button.send-button, button[aria-label='Send message'], button[mat-icon-button], button[type='submit']";
     const answerSel = cfg.answerContainerSelector || "main, [data-model-id]";
     const copySel = cfg.copyButtonSelector || "button[aria-label='Copy'], [aria-label*='Copy']";
+    const doneSel = cfg.doneCheckSelector || "button[aria-label='Stop'], mat-icon[data-mat-icon-name='stop_circle']";
 
     (async () => {
       try {
@@ -23,14 +24,20 @@
 
         await utils.clickSubmitOrEnter(submitSel, input);
 
-        if (utils.waitForStable) {
+        // 応答が完了するまで待つ
+        if (utils.waitForResponseComplete) {
+          await utils.waitForResponseComplete(answerSel, doneSel, 90000, 5000);
+        } else if (utils.waitForStable) {
           await utils.waitForStable(answerSel, 3000);
         } else {
           await new Promise((r) => setTimeout(r, 5000));
         }
 
+        // 応答テキストを取得
         let markdown = "";
-        if (utils.copyResponseViaClipboard) {
+        if (utils.getResponseText) {
+          markdown = await utils.getResponseText(copySel, answerSel);
+        } else if (utils.copyResponseViaClipboard) {
           try {
             markdown = await utils.copyResponseViaClipboard(copySel);
           } catch (e) {

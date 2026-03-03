@@ -7,6 +7,7 @@
     const submitSel = cfg.submitButtonSelector || "button#composer-submit-button, button[data-testid='send-button']";
     const answerSel = cfg.answerContainerSelector || "main div[data-testid='conversation-turns'], main";
     const copySel = cfg.copyButtonSelector || "button[aria-label='Copy'], [data-testid*='copy']";
+    const doneSel = cfg.doneCheckSelector || "button[data-testid='stop-button']";
 
     (async () => {
       try {
@@ -44,14 +45,20 @@
 
         await utils.clickSubmitOrEnter(submitSel, input);
 
-        if (utils.waitForStable) {
+        // 応答が完了するまで待つ（stopボタンが消えるまで + DOM安定）
+        if (utils.waitForResponseComplete) {
+          await utils.waitForResponseComplete(answerSel, doneSel, 90000, 5000);
+        } else if (utils.waitForStable) {
           await utils.waitForStable(answerSel, 3000);
         } else {
           await new Promise((r) => setTimeout(r, 5000));
         }
 
+        // 応答テキストを取得（コピーボタン → DOM フォールバック）
         let markdown = "";
-        if (utils.copyResponseViaClipboard) {
+        if (utils.getResponseText) {
+          markdown = await utils.getResponseText(copySel, answerSel);
+        } else if (utils.copyResponseViaClipboard) {
           try {
             markdown = await utils.copyResponseViaClipboard(copySel);
           } catch (e) {

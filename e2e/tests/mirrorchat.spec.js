@@ -44,6 +44,19 @@ test.describe("MirrorChat 拡張機能", () => {
     await expect(page.locator("#obsidian-base-url")).toBeVisible();
   });
 
+  test("設定ページで各AIのコピーボタンセレクタが表示される", async ({ page, extensionId }) => {
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+
+    // 各AIの設定セクションにコピーボタンセレクタ入力欄があること
+    const aiConfigs = page.locator(".ai-config");
+    const count = await aiConfigs.count();
+    expect(count).toBe(4);
+
+    for (let i = 0; i < count; i++) {
+      await expect(aiConfigs.nth(i).locator(".copy-selector")).toBeVisible();
+    }
+  });
+
   test("質問入力して送信ボタンを押すと送信が開始される", async ({
     context,
     page,
@@ -65,5 +78,112 @@ test.describe("MirrorChat 拡張機能", () => {
     await expect(page.locator("#status")).toContainText(/送信|開始/, {
       timeout: 5_000,
     });
+  });
+
+  test("サイトを開いた後にサイトを閉じるボタンが動作する", async ({
+    context,
+    page,
+    extensionId,
+  }) => {
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+
+    // タブを開く
+    await page.locator("#open-tabs-button").click();
+    await expect(page.locator("#status")).toContainText(/開きました|開いています/, {
+      timeout: 15_000,
+    });
+    await expect(page.locator("#close-tabs-button")).toBeEnabled({ timeout: 5_000 });
+
+    // タブを閉じる
+    await page.locator("#close-tabs-button").click();
+    await expect(page.locator("#status")).toContainText(/閉じました/, {
+      timeout: 5_000,
+    });
+
+    // 送信ボタンが無効に戻る
+    await expect(page.locator("#send-button")).toBeDisabled({ timeout: 5_000 });
+  });
+
+  test("設定を保存・復元できる", async ({ page, extensionId }) => {
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+
+    // テスト用のURLを入力
+    const baseUrlInput = page.locator("#obsidian-base-url");
+    await baseUrlInput.fill("http://127.0.0.1:27124/");
+
+    const rootPathInput = page.locator("#obsidian-root-path");
+    await rootPathInput.fill("TestPath");
+
+    // 保存
+    await page.locator("#save-button").click();
+    await expect(page.locator("#status")).toContainText("保存しました", {
+      timeout: 5_000,
+    });
+
+    // ページをリロードして復元を確認
+    await page.reload();
+    await expect(baseUrlInput).toHaveValue("http://127.0.0.1:27124/", {
+      timeout: 5_000,
+    });
+    await expect(rootPathInput).toHaveValue("TestPath", {
+      timeout: 5_000,
+    });
+  });
+
+  test("質問が空の場合にエラーメッセージが表示される", async ({ page, extensionId }) => {
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+
+    // タブを開く（送信ボタンを有効にするため）
+    await page.locator("#open-tabs-button").click();
+    await expect(page.locator("#send-button")).toBeEnabled({ timeout: 15_000 });
+
+    // 空のまま送信
+    await page.locator("#send-button").click();
+
+    await expect(page.locator("#status")).toContainText("入力してください", {
+      timeout: 5_000,
+    });
+  });
+
+  test("各AIインジケータが初期状態で表示される", async ({ page, extensionId }) => {
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+
+    const aiKeys = ["chatgpt", "claude", "gemini", "grok"];
+    for (const key of aiKeys) {
+      await expect(page.locator(`#ind-${key}`)).toBeVisible();
+    }
+  });
+
+  test("タブを開くとインジケータがopen状態になる", async ({ page, extensionId }) => {
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+    await page.locator("#open-tabs-button").click();
+    await expect(page.locator("#status")).toContainText(/開きました|開いています/, {
+      timeout: 15_000,
+    });
+
+    // 少なくとも1つのインジケータがopen状態になっているか
+    const aiKeys = ["chatgpt", "claude", "gemini", "grok"];
+    let hasOpen = false;
+    for (const key of aiKeys) {
+      const classList = await page.locator(`#ind-${key}`).getAttribute("class");
+      if (classList && classList.includes("open")) {
+        hasOpen = true;
+        break;
+      }
+    }
+    expect(hasOpen).toBe(true);
+  });
+
+  test("ポップアップ再表示時にタブ状態が復帰する", async ({ context, page, extensionId }) => {
+    // タブを開く
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+    await page.locator("#open-tabs-button").click();
+    await expect(page.locator("#send-button")).toBeEnabled({ timeout: 15_000 });
+
+    // ポップアップを再度開く（ページを再ナビゲート）
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+
+    // タブ状態が復帰して送信ボタンが有効であること
+    await expect(page.locator("#send-button")).toBeEnabled({ timeout: 10_000 });
   });
 });

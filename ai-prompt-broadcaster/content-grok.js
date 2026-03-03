@@ -5,6 +5,7 @@
     const inputSel = cfg.inputSelector || "div[contenteditable='true'], textarea";
     const answerSel = cfg.answerContainerSelector || "main, article";
     const copySel = cfg.copyButtonSelector || "button[aria-label='Copy'], [aria-label*='Copy']";
+    const doneSel = cfg.doneCheckSelector || "button[aria-label='Stop'], button[aria-label='Cancel']";
 
     (async () => {
       try {
@@ -22,14 +23,20 @@
         // Grok は Enter キーで送信する
         utils.pressEnterToSubmit(input);
 
-        if (utils.waitForStable) {
+        // 応答が完了するまで待つ
+        if (utils.waitForResponseComplete) {
+          await utils.waitForResponseComplete(answerSel, doneSel, 90000, 5000);
+        } else if (utils.waitForStable) {
           await utils.waitForStable(answerSel, 4000);
         } else {
           await new Promise((r) => setTimeout(r, 6000));
         }
 
+        // 応答テキストを取得
         let markdown = "";
-        if (utils.copyResponseViaClipboard) {
+        if (utils.getResponseText) {
+          markdown = await utils.getResponseText(copySel, answerSel);
+        } else if (utils.copyResponseViaClipboard) {
           try {
             markdown = await utils.copyResponseViaClipboard(copySel);
           } catch (e) {

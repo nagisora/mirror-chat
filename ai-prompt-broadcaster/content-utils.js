@@ -79,6 +79,39 @@ function waitForStable(containerSelector, stableMs = 3000) {
 }
 
 /**
+ * AIの応答が完了するまで待つ。
+ * doneCheckSelector（停止ボタン等）が消えるまで、または maxWaitMs 経過まで待機。
+ * その後、DOM が安定するまで追加で待つ。
+ *
+ * @param {string} answerContainerSelector - 回答コンテナのセレクタ
+ * @param {string} doneCheckSelector - 応答中に表示される要素のセレクタ（例: 停止ボタン）。消えたら応答完了とみなす
+ * @param {number} maxWaitMs - 最大待機時間（デフォルト90秒）
+ * @param {number} stableMs - DOM安定とみなす無変更時間（デフォルト5秒）
+ */
+async function waitForResponseComplete(answerContainerSelector, doneCheckSelector, maxWaitMs = 90000, stableMs = 5000) {
+  const start = Date.now();
+
+  // フェーズ1: まず応答が開始されるのを待つ（コンテナ内に何か出現するまで）
+  while (Date.now() - start < 15000) {
+    const container = document.querySelector(answerContainerSelector);
+    if (container && container.children.length > 0) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  // フェーズ2: doneCheckSelector がある場合、それが消えるまで待つ
+  if (doneCheckSelector) {
+    while (Date.now() - start < maxWaitMs) {
+      const indicator = document.querySelector(doneCheckSelector);
+      if (!indicator) break; // 停止ボタン等が消えた = 応答完了
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+
+  // フェーズ3: DOM が安定するまで追加で待つ
+  await waitForStable(answerContainerSelector, stableMs);
+}
+
+/**
  * 人間らしいランダム遅延（bot判定回避）
  */
 function humanDelay(minMs = 1500, maxMs = 3000) {
@@ -226,6 +259,11 @@ async function clickSubmitOrEnter(submitSelector, inputElement, timeout = 8000) 
  * コピーボタンをクリックしてクリップボードからAI応答テキストを取得する。
  * 各AIチャットのコピーボタンは最新の応答をコピーするため、DOM抽出より正確。
  *
+ * 取得手順:
+ * 1. navigator.clipboard.writeText をインターセプトして書き込まれるテキストを横取り
+ * 2. copy イベントリスナーで clipboardData を取得
+ * 3. タイムアウト後はフォールバックとして navigator.clipboard.readText を試行
+ *
  * @param {string} copyButtonSelector - コピーボタンのセレクタ（複数マッチ時は最後の=最新応答のボタンを使用）
  * @returns {Promise<string>} クリップボードから取得したテキスト
  */
@@ -249,11 +287,11 @@ async function copyResponseViaClipboard(copyButtonSelector) {
   }
 
   if (!copyBtn) {
-    throw new Error("コピーボタンが見つかりません");
+    throw new Error("コピーボタンが見つかりません: " + copyButtonSelector);
   }
 
   copyBtn.scrollIntoView({ block: "center" });
-  await new Promise((r) => setTimeout(r, 100));
+  await new Promise((r) => setTimeout(r, 300));
 
   return new Promise((resolve, reject) => {
     let timeoutId;
@@ -263,7 +301,15 @@ async function copyResponseViaClipboard(copyButtonSelector) {
     const cleanup = () => {
       clearTimeout(timeoutId);
       if (originalWriteText && navigator.clipboard) {
-        navigator.clipboard.writeText = originalWriteText;
+        try {
+          Object.defineProperty(navigator.clipboard, "writeText", {
+            value: originalWriteText,
+            writable: true,
+            configurable: true,
+          });
+        } catch {
+          navigator.clipboard.writeText = originalWriteText;
+        }
       }
       document.removeEventListener("copy", copyListener, true);
     };
@@ -275,6 +321,7 @@ async function copyResponseViaClipboard(copyButtonSelector) {
       resolve(text);
     };
 
+    // 方法1: copy イベントリスナー
     const copyListener = (e) => {
       const text = e.clipboardData?.getData("text/plain");
       if (text) {
@@ -283,12 +330,22 @@ async function copyResponseViaClipboard(copyButtonSelector) {
     };
     document.addEventListener("copy", copyListener, true);
 
+    // 方法2: navigator.clipboard.writeText をインターセプト
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      originalWriteText = navigator.clipboard.writeText;
-      navigator.clipboard.writeText = async function(text) {
+      originalWriteText = navigator.clipboard.writeText.bind(navigator.clipboard);
+      const interceptor = function (text) {
         finish(text);
-        return originalWriteText.apply(this, arguments).catch(() => {});
+        return originalWriteText(text).catch(() => {});
       };
+      try {
+        Object.defineProperty(navigator.clipboard, "writeText", {
+          value: interceptor,
+          writable: true,
+          configurable: true,
+        });
+      } catch {
+        navigator.clipboard.writeText = interceptor;
+      }
     }
 
     try {
@@ -299,22 +356,138 @@ async function copyResponseViaClipboard(copyButtonSelector) {
       return;
     }
 
-    timeoutId = setTimeout(() => {
-      if (!resolved) {
-        cleanup();
-        reject(new Error("コピータイムアウト"));
+    // 方法3: タイムアウト後、readText を試行してからフォールバック
+    timeoutId = setTimeout(async () => {
+      if (resolved) return;
+
+      // readText フォールバック
+      try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          const text = await navigator.clipboard.readText();
+          if (text && text.length > 0) {
+            finish(text);
+            return;
+          }
+        }
+      } catch {
+        // readText も失敗
       }
+
+      cleanup();
+      reject(new Error("コピータイムアウト: テキストを取得できませんでした"));
     }, 5000);
   });
+}
+
+/**
+ * 最新のAI応答のテキストを DOM から直接抽出する。
+ * コピーボタンが機能しない場合のフォールバック。
+ * 各AI向けの answerContainerSelector 内の最後のメッセージブロックを取得する。
+ *
+ * @param {string} answerContainerSelector - 回答コンテナのセレクタ
+ * @returns {string} 抽出したMarkdownテキスト
+ */
+function extractLatestResponseFromDOM(answerContainerSelector) {
+  const selectors = (answerContainerSelector || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  for (const sel of selectors) {
+    try {
+      const container = document.querySelector(sel);
+      if (!container) continue;
+
+      // メッセージブロックを探す（一般的なパターン）
+      // ChatGPT: [data-message-author-role="assistant"]
+      // Claude: div.font-claude-message, [data-is-streaming]
+      // Gemini: message-content, model-response
+      // Grok: 各メッセージブロック
+      const messageSelectors = [
+        "[data-message-author-role='assistant']",
+        "div.font-claude-message",
+        "[data-testid='chat-message-content']",
+        "message-content",
+        "model-response",
+        ".markdown",
+        ".prose",
+        "article",
+      ];
+
+      for (const msgSel of messageSelectors) {
+        const msgs = container.querySelectorAll(msgSel);
+        if (msgs.length > 0) {
+          const lastMsg = msgs[msgs.length - 1];
+          return htmlToMarkdown(lastMsg);
+        }
+      }
+
+      // フォールバック: コンテナ全体を変換
+      return htmlToMarkdown(container);
+    } catch {
+      continue;
+    }
+  }
+  return "";
+}
+
+/**
+ * AI応答テキストを取得する統合関数。
+ * 1. まずコピーボタンのクリックを試行
+ * 2. 失敗した場合は DOM から直接抽出
+ *
+ * @param {string} copyButtonSelector - コピーボタンのセレクタ
+ * @param {string} answerContainerSelector - 回答コンテナのセレクタ
+ * @returns {Promise<string>} 取得したテキスト
+ */
+async function getResponseText(copyButtonSelector, answerContainerSelector) {
+  // 方法1: コピーボタン
+  if (copyButtonSelector) {
+    try {
+      const text = await copyResponseViaClipboard(copyButtonSelector);
+      if (text && text.trim().length > 0) {
+        return text;
+      }
+    } catch (e) {
+      console.warn("MirrorChat: コピーボタン経由の取得に失敗、DOMフォールバックを使用:", e.message);
+    }
+  }
+
+  // 方法2: DOM から直接抽出
+  const domText = extractLatestResponseFromDOM(answerContainerSelector);
+  if (domText && domText.trim().length > 0) {
+    return domText;
+  }
+
+  // 方法3: answerContainerSelector の innerText
+  const selectors = (answerContainerSelector || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const sel of selectors) {
+    try {
+      const container = document.querySelector(sel);
+      if (container && container.innerText.trim().length > 0) {
+        return container.innerText.trim();
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return "";
 }
 
 window.MirrorChatUtils = {
   htmlToMarkdown,
   waitFor,
   waitForStable,
+  waitForResponseComplete,
   humanDelay,
   simulateInput,
   pressEnterToSubmit,
   clickSubmitOrEnter,
-  copyResponseViaClipboard
+  copyResponseViaClipboard,
+  extractLatestResponseFromDOM,
+  getResponseText
 };

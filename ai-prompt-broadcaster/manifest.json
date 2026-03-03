@@ -20,7 +20,8 @@
     "tabs",
     "scripting",
     "notifications",
-    "clipboardRead"
+    "clipboardRead",
+    "clipboardWrite"
   ],
   "host_permissions": [
     "*://chat.openai.com/*",

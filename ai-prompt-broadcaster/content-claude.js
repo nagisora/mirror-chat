@@ -8,6 +8,7 @@
     const submitSel = cfg.submitButtonSelector || "button[class*='Button_claude'], div.shrink-0 button[aria-label]";
     const answerSel = cfg.answerContainerSelector || "[data-testid='conversation-thread'], main, [class*='message']";
     const copySel = cfg.copyButtonSelector || "[data-testid='action-bar-copy'], button[aria-label='Copy']";
+    const doneSel = cfg.doneCheckSelector || "[data-testid='stop-button'], button[aria-label='Stop']";
 
     (async () => {
       try {
@@ -25,14 +26,20 @@
         // ボタンクリックを優先、フォールバックで Enter
         await utils.clickSubmitOrEnter(submitSel, input);
 
-        if (utils.waitForStable) {
+        // 応答が完了するまで待つ
+        if (utils.waitForResponseComplete) {
+          await utils.waitForResponseComplete(answerSel, doneSel, 90000, 5000);
+        } else if (utils.waitForStable) {
           await utils.waitForStable(answerSel, 3000);
         } else {
           await new Promise((r) => setTimeout(r, 5000));
         }
 
+        // 応答テキストを取得
         let markdown = "";
-        if (utils.copyResponseViaClipboard) {
+        if (utils.getResponseText) {
+          markdown = await utils.getResponseText(copySel, answerSel);
+        } else if (utils.copyResponseViaClipboard) {
           try {
             markdown = await utils.copyResponseViaClipboard(copySel);
           } catch (e) {
