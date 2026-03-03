@@ -10,7 +10,25 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
   (async () => {
     try {
-      const text = await navigator.clipboard.readText();
+      // 1. まず navigator.clipboard.readText() を試行
+      try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          const text = await navigator.clipboard.readText();
+          sendResponse({ ok: true, text: text || "" });
+          return;
+        }
+      } catch (e) {
+        console.warn("navigator.clipboard.readText failed, trying fallback:", e);
+      }
+
+      // 2. 失敗した場合は execCommand("paste") にフォールバック
+      const textarea = document.createElement("textarea");
+      document.body.appendChild(textarea);
+      textarea.focus();
+      document.execCommand("paste");
+      const text = textarea.value;
+      document.body.removeChild(textarea);
+
       sendResponse({ ok: true, text: text || "" });
     } catch (e) {
       sendResponse({ ok: false, error: e?.message || String(e) });
