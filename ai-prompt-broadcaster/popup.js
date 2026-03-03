@@ -26,7 +26,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const retrySection = document.getElementById("retry-section");
   const retryButton = document.getElementById("retry-button");
 
-  const AI_KEYS = ["chatgpt", "claude", "gemini", "grok"];
+  const AI_KEYS = window.MirrorChatConstants?.AI_KEYS ?? ["chatgpt", "claude", "gemini", "grok"];
   const indicators = {};
   AI_KEYS.forEach((key) => {
     indicators[key] = document.getElementById("ind-" + key);
@@ -158,8 +158,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   async function updateRetryVisibility() {
-    const items = await new Promise((r) =>
-      chrome.storage.local.get("mirrorchatFailedItems", (x) => r(x.mirrorchatFailedItems || []))
+    const key = window.MirrorChatConstants?.STORAGE_KEYS?.FAILED_ITEMS ?? "mirrorchatFailedItems";
+    const items = await new Promise((resolve) =>
+      chrome.storage.local.get(key, (x) => resolve(x[key] || []))
     );
     retrySection.hidden = items.length === 0;
   }
@@ -168,8 +169,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   refreshTabStatus();
 
   // 直前の質問が未取得のまま残っている場合は、回答取得ボタンを有効化する
-  chrome.storage.local.get("mirrorchatCurrentTask", (data) => {
-    const current = data?.mirrorchatCurrentTask;
+  const currentTaskKey = window.MirrorChatConstants?.STORAGE_KEYS?.CURRENT_TASK ?? "mirrorchatCurrentTask";
+  chrome.storage.local.get(currentTaskKey, (data) => {
+    const current = data?.[currentTaskKey];
     if (current?.prompt) {
       // 入力欄に復元しておく（必要に応じて編集もできる）
       promptInput.value = current.prompt;

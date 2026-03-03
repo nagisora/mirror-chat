@@ -5,6 +5,12 @@
  * 参考: pykrete67/prompt-queue-extension の common.js
  *       repmax/ai-chat-downloader の Markdown 変換
  */
+
+const RESPONSE_WAIT_INITIAL_MS = 15000;
+const POLL_INTERVAL_MS = 500;
+const COPY_TIMEOUT_MS = 5500;
+const CLIPBOARD_READ_ATTEMPTS_MS = [400, 900, 1600, 2500, 4000];
+
 function htmlToMarkdown(container) {
   if (!container) return "";
   const walk = (node) => {
@@ -92,10 +98,10 @@ async function waitForResponseComplete(answerContainerSelector, doneCheckSelecto
   const start = Date.now();
 
   // フェーズ1: まず応答が開始されるのを待つ（コンテナ内に何か出現するまで）
-  while (Date.now() - start < 15000) {
+  while (Date.now() - start < RESPONSE_WAIT_INITIAL_MS) {
     const container = document.querySelector(answerContainerSelector);
     if (container && container.children.length > 0) break;
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
   }
 
   // フェーズ2: doneCheckSelector がある場合、それが消えるまで待つ
@@ -398,8 +404,7 @@ async function copyResponseViaClipboard(copyButtonSelector) {
       }
     };
 
-    const attempts = [400, 900, 1600, 2500, 4000];
-    attempts.forEach((ms) => {
+    CLIPBOARD_READ_ATTEMPTS_MS.forEach((ms) => {
       setTimeout(() => tryOffscreenRead(), ms);
     });
 
@@ -409,7 +414,7 @@ async function copyResponseViaClipboard(copyButtonSelector) {
       if (resolved) return;
       cleanup();
       reject(new Error("コピータイムアウト: テキストを取得できませんでした"));
-    }, 5500);
+    }, COPY_TIMEOUT_MS);
   });
 }
 

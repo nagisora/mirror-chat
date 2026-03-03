@@ -1,24 +1,31 @@
-importScripts("storage.js", "obsidianClient.js");
+importScripts("constants.js", "storage.js", "obsidianClient.js");
 
-const AI_KEYS = ["chatgpt", "claude", "gemini", "grok"];
-const CONTENT_SCRIPTS = {
-  chatgpt: { files: ["content-utils.js", "content-chatgpt.js"] },
-  claude: { files: ["content-utils.js", "content-claude.js"] },
-  gemini: { files: ["content-utils.js", "content-gemini.js"] },
-  grok: { files: ["content-utils.js", "content-grok.js"] }
-};
-const TASK_TIMEOUT_MS = 120000;
-const FAILED_ITEMS_KEY = "mirrorchatFailedItems";
-const CURRENT_TASK_KEY = "mirrorchatCurrentTask";
+const { AI_KEYS, STORAGE_KEYS, TIMEOUT_MS, CONTENT_SCRIPTS } = self.MirrorChatConstants;
+const TASK_TIMEOUT_MS = TIMEOUT_MS.TASK;
+const FAILED_ITEMS_KEY = STORAGE_KEYS.FAILED_ITEMS;
+const CURRENT_TASK_KEY = STORAGE_KEYS.CURRENT_TASK;
+const FOCUS_DELAY_MS = TIMEOUT_MS.FOCUS_DELAY;
 
 const NOTIFICATION_ICON_URL = chrome.runtime.getURL("icon128.png");
 
+function showNotification(title, message) {
+  chrome.notifications.create(
+    "",
+    { type: "basic", iconUrl: NOTIFICATION_ICON_URL, title, message },
+    () => {
+      if (chrome.runtime.lastError) {
+        console.error("MirrorChat notification error:", chrome.runtime.lastError.message);
+      }
+    }
+  );
+}
+
 // 開いているAIタブを追跡: { chatgpt: tabId, claude: tabId, ... }
-const openTabs = {};
+const aiTabIds = {};
 const queue = [];
 let processing = false;
 
-function getFolderName(question) {
+function getObsidianFolderName(question) {
   const safe = String(question).replace(/[/\\?*:"<>|]/g, "").slice(0, 20);
   const date = new Date().toISOString().slice(0, 10);
   return `${date}_${safe}`;
@@ -34,7 +41,7 @@ function buildSummary(results) {
 
 async function saveToObsidian(question, results, settings) {
   const root = (settings.obsidian?.rootPath || "AI-Research").replace(/\/$/, "");
-  const folder = getFolderName(question);
+  const folder = getObsidianFolderName(question);
   const basePath = `${root}/${folder}`;
   const { baseUrl, token } = settings.obsidian || {};
 
@@ -57,12 +64,12 @@ async function saveToObsidian(question, results, settings) {
   return { ok: true };
 }
 
-async function saveFailedToLocal(payload) {
-  const items = await new Promise((r) =>
-    chrome.storage.local.get(FAILED_ITEMS_KEY, (x) => r(x[FAILED_ITEMS_KEY] || []))
+async function appendFailedItemToLocal(payload) {
+  const items = await new Promise((resolve) =>
+    chrome.storage.local.get(FAILED_ITEMS_KEY, (x) => resolve(x[FAILED_ITEMS_KEY] || []))
   );
   items.push({ ...payload, ts: Date.now() });
-  await new Promise((r) => chrome.storage.local.set({ [FAILED_ITEMS_KEY]: items }, r));
+  await new Promise((resolve) => chrome.storage.local.set({ [FAILED_ITEMS_KEY]: items }, resolve));
 }
 
 function notifyAIStatus(ai, state) {
@@ -72,8 +79,8 @@ function notifyAIStatus(ai, state) {
 // タブが閉じられたら追跡から削除
 chrome.tabs.onRemoved.addListener((tabId) => {
   for (const key of AI_KEYS) {
-    if (openTabs[key] === tabId) {
-      delete openTabs[key];
+    if (aiTabIds[key] === tabId) {
+      delete aiTabIds[key];
       notifyAIStatus(key, "");
       break;
     }
@@ -88,10 +95,10 @@ async function openAITabs() {
     if (!url) continue;
 
     // 既に開いているタブがあるか確認
-    if (openTabs[aiKey]) {
+    if (aiTabIds[aiKey]) {
       try {
         await new Promise((resolve, reject) => {
-          chrome.tabs.get(openTabs[aiKey], (tab) => {
+          chrome.tabs.get(aiTabIds[aiKey], (tab) => {
             if (chrome.runtime.lastError || !tab) {
               reject(new Error("tab not found"));
             } else {
@@ -101,7 +108,7 @@ async function openAITabs() {
         });
         continue; // タブはまだ存在するのでスキップ
       } catch {
-        delete openTabs[aiKey];
+        delete aiTabIds[aiKey];
       }
     }
 
@@ -116,20 +123,20 @@ async function openAITabs() {
     });
 
     if (tab) {
-      openTabs[aiKey] = tab.id;
+      aiTabIds[aiKey] = tab.id;
       notifyAIStatus(aiKey, "open");
     }
   }
-  return { ...openTabs };
+  return { ...aiTabIds };
 }
 
 function closeAITabs() {
   for (const aiKey of AI_KEYS) {
-    if (openTabs[aiKey]) {
-      chrome.tabs.remove(openTabs[aiKey], () => {
+    if (aiTabIds[aiKey]) {
+      chrome.tabs.remove(aiTabIds[aiKey], () => {
         void chrome.runtime.lastError;
       });
-      delete openTabs[aiKey];
+      delete aiTabIds[aiKey];
       notifyAIStatus(aiKey, "");
     }
   }
@@ -175,7 +182,7 @@ async function focusMirrorChatTab() {
 
 async function sendPromptToAI(aiKey, prompt, settings) {
   const cfg = settings.aiConfigs?.[aiKey];
-  const tabId = openTabs[aiKey];
+  const tabId = aiTabIds[aiKey];
 
   if (!tabId) {
     notifyAIStatus(aiKey, "error");
@@ -248,7 +255,7 @@ async function sendPromptToAI(aiKey, prompt, settings) {
 
 async function processOneTask(aiKey, prompt, settings) {
   const cfg = settings.aiConfigs?.[aiKey];
-  const tabId = openTabs[aiKey];
+  const tabId = aiTabIds[aiKey];
 
   if (!tabId) {
     return { ai: aiKey, name: cfg?.name || aiKey, markdown: "", error: "タブが開いていません" };
@@ -285,7 +292,7 @@ async function processOneTask(aiKey, prompt, settings) {
       })
     );
     // フォーカスが当たるまで少し待機
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((resolve) => setTimeout(resolve, FOCUS_DELAY_MS));
   } catch (e) {
     console.warn("MirrorChat: focus tab failed", e);
   }
@@ -357,7 +364,7 @@ async function runTask(task) {
     results = [];
     for (const aiKey of AI_KEYS) {
       const cfg = settings.aiConfigs?.[aiKey];
-      if (!openTabs[aiKey]) {
+      if (!aiTabIds[aiKey]) {
         results.push({
           ai: aiKey,
           name: cfg?.name || aiKey,
@@ -375,59 +382,20 @@ async function runTask(task) {
   }
 
   const saveResult = await saveToObsidian(task.prompt, results, settings);
+  const failed = results.filter((r) => r.error).map((r) => r.name);
   if (!saveResult.ok) {
-    await saveFailedToLocal({
+    await appendFailedItemToLocal({
       question: task.prompt,
       results,
       error: saveResult.error
     });
-    const failed = results.filter((r) => r.error).map((r) => r.name);
-    chrome.notifications.create(
-      "",
-      {
-        type: "basic",
-        iconUrl: NOTIFICATION_ICON_URL,
-        title: "MirrorChat: 一部失敗",
-        message: `Obsidian保存失敗。失敗: ${failed.join(", ")}。再送可能です。`
-      },
-      () => {
-        if (chrome.runtime.lastError) {
-          console.error("MirrorChat notification error:", chrome.runtime.lastError.message);
-        }
-      }
-    );
+    showNotification("MirrorChat: 一部失敗", `Obsidian保存失敗。失敗: ${failed.join(", ")}。再送可能です。`);
   } else {
-    const failed = results.filter((r) => r.error).map((r) => r.name);
     if (failed.length > 0) {
-      chrome.notifications.create(
-        "",
-        {
-          type: "basic",
-          iconUrl: NOTIFICATION_ICON_URL,
-          title: "MirrorChat: 一部失敗",
-          message: `取得失敗: ${failed.join(", ")}。Obsidianには保存済みです。`
-        },
-        () => {
-          if (chrome.runtime.lastError) {
-            console.error("MirrorChat notification error:", chrome.runtime.lastError.message);
-          }
-        }
-      );
+      showNotification("MirrorChat: 一部失敗", `取得失敗: ${failed.join(", ")}。Obsidianには保存済みです。`);
     } else {
-      chrome.notifications.create(
-        "",
-        {
-          type: "basic",
-          iconUrl: NOTIFICATION_ICON_URL,
-          title: "MirrorChat: 完了",
-          message: "4つのAIから回答を取得し、Obsidianに保存しました。"
-        },
-        () => {
-          if (chrome.runtime.lastError) {
-            console.error("MirrorChat notification error:", chrome.runtime.lastError.message);
-          }
-        }
-      );
+      const aiCount = AI_KEYS.length;
+      showNotification("MirrorChat: 完了", `${aiCount}つのAIから回答を取得し、Obsidianに保存しました。`);
     }
   }
 
@@ -518,7 +486,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === "MIRRORCHAT_OPEN_TABS") {
     openAITabs().then((tabs) => {
-      sendResponse({ ok: true, openTabs: tabs });
+      sendResponse({ ok: true, aiTabIds: tabs });
     });
     return true;
   }
@@ -533,20 +501,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // 開いているタブの状態を返す（ポップアップ再表示時の復帰用）
     const validTabs = {};
     const checks = AI_KEYS.map((key) => {
-      if (!openTabs[key]) return Promise.resolve();
+      if (!aiTabIds[key]) return Promise.resolve();
       return new Promise((resolve) => {
-        chrome.tabs.get(openTabs[key], (tab) => {
+        chrome.tabs.get(aiTabIds[key], (tab) => {
           if (chrome.runtime.lastError || !tab) {
-            delete openTabs[key];
+            delete aiTabIds[key];
           } else {
-            validTabs[key] = openTabs[key];
+            validTabs[key] = aiTabIds[key];
           }
           resolve();
         });
       });
     });
     Promise.all(checks).then(() => {
-      sendResponse({ openTabs: validTabs });
+      sendResponse({ aiTabIds: validTabs });
     });
     return true;
   }
@@ -566,7 +534,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
         const settings = await self.MirrorChatStorage.getSettings();
         const sendPromises = AI_KEYS.map((aiKey) => {
-          if (!openTabs[aiKey]) {
+          if (!aiTabIds[aiKey]) {
             const cfg = settings.aiConfigs?.[aiKey];
             notifyAIStatus(aiKey, "error");
             return Promise.resolve({
