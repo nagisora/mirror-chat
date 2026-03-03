@@ -77,12 +77,14 @@
         try {
           const utils = window.MirrorChatUtils || {};
 
-          // 回答はユーザー操作で「出揃っている」前提のため、
-          // 長時間の待機はせず、短時間だけDOMの安定を待つ
-          if (utils.waitForStable) {
-            await utils.waitForStable(answerSel, 1000);
+          // 回答は基本的に出揃っている前提だが、安全のため短めの完了待ちを入れる
+          if (utils.waitForResponseComplete) {
+            // 以前より短いが、DOM更新を待つには十分な時間
+            await utils.waitForResponseComplete(answerSel, doneSel, 15000, 1500);
+          } else if (utils.waitForStable) {
+            await utils.waitForStable(answerSel, 1500);
           } else {
-            await new Promise((r) => setTimeout(r, 1000));
+            await new Promise((r) => setTimeout(r, 1500));
           }
 
           // 応答テキストを取得（コピーボタン → DOM フォールバック）
