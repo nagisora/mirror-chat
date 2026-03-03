@@ -4,12 +4,14 @@
  *
  * 参考: pykrete67/prompt-queue-extension の common.js
  *       repmax/ai-chat-downloader の Markdown 変換
+ *
+ * 注意: 同一タブに SEND_ONLY / FETCH_ONLY で複数回インジェクトされるため、
+ *       const だと "already been declared" エラーになる。var を使用する。
  */
-
-const RESPONSE_WAIT_INITIAL_MS = 15000;
-const POLL_INTERVAL_MS = 500;
-const COPY_TIMEOUT_MS = 5500;
-const CLIPBOARD_READ_ATTEMPTS_MS = [400, 900, 1600, 2500, 4000];
+var RESPONSE_WAIT_INITIAL_MS = RESPONSE_WAIT_INITIAL_MS || 15000;
+var POLL_INTERVAL_MS = POLL_INTERVAL_MS || 500;
+var COPY_TIMEOUT_MS = COPY_TIMEOUT_MS || 5500;
+var CLIPBOARD_READ_ATTEMPTS_MS = CLIPBOARD_READ_ATTEMPTS_MS || [400, 900, 1600, 2500, 4000];
 
 function htmlToMarkdown(container) {
   if (!container) return "";

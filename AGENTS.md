@@ -59,6 +59,7 @@ mkdir -p /home/ubuntu/ObsidianVault
 
 ### 注意事項
 
+- **content-utils.js の定数**: 同一タブに SEND_ONLY / FETCH_ONLY で複数回インジェクトされるため、`const` だと "Identifier has already been declared" エラーになる。定数は `var` + 既存値チェック（`var X = X || 初期値`）で宣言すること。
 - コンテナ環境では dbus 関連のエラーが出るが、拡張機能の動作には影響しない。
 - 各AIサービスのDOMセレクタはUI変更で壊れる可能性がある。Options ページで調整可能。
 - Obsidian Local REST API の API キーは拡張機能の Options ページで設定する。
