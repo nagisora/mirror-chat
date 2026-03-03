@@ -486,7 +486,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === "MIRRORCHAT_OPEN_TABS") {
     openAITabs().then((tabs) => {
-      sendResponse({ ok: true, aiTabIds: tabs });
+      sendResponse({ ok: true, openTabs: tabs });
     });
     return true;
   }
@@ -514,7 +514,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       });
     });
     Promise.all(checks).then(() => {
-      sendResponse({ aiTabIds: validTabs });
+      sendResponse({ openTabs: validTabs });
     });
     return true;
   }

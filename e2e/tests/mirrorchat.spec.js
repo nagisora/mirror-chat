@@ -41,6 +41,18 @@ test.describe("MirrorChat 拡張機能", () => {
 
   test("回答取得ボタンの状態がフローに応じて変化する", async ({ page, extensionId }) => {
     await page.goto(`chrome-extension://${extensionId}/popup.html?standalone=1`);
+    // 前のテストの残留状態をクリアして初期状態を保証（タブ閉じ＋storage クリア）
+    await page.evaluate(() => {
+      return new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: "MIRRORCHAT_CLOSE_TABS" }, () => {
+          chrome.storage.local.remove(
+            ["mirrorchatCurrentTask", "mirrorchatFailedItems"],
+            resolve
+          );
+        });
+      });
+    });
+    await page.goto(`chrome-extension://${extensionId}/popup.html?standalone=1`);
 
     const openTabsBtn = page.locator("#open-tabs-button");
     const sendBtn = page.locator("#send-button");
