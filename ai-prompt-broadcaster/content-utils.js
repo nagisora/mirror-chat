@@ -255,19 +255,57 @@ async function copyResponseViaClipboard(copyButtonSelector) {
   copyBtn.scrollIntoView({ block: "center" });
   await new Promise((r) => setTimeout(r, 100));
 
-  const previousClipboard = await navigator.clipboard.readText().catch(() => "");
+  return new Promise((resolve, reject) => {
+    let timeoutId;
+    let originalWriteText = null;
+    let resolved = false;
 
-  copyBtn.click();
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      if (originalWriteText && navigator.clipboard) {
+        navigator.clipboard.writeText = originalWriteText;
+      }
+      document.removeEventListener("copy", copyListener, true);
+    };
 
-  for (let i = 0; i < 10; i++) {
-    await new Promise((r) => setTimeout(r, 200 + i * 100));
-    const text = await navigator.clipboard.readText().catch(() => "");
-    if (text && text !== previousClipboard && text.length > 10) {
-      return text;
+    const finish = (text) => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      resolve(text);
+    };
+
+    const copyListener = (e) => {
+      const text = e.clipboardData?.getData("text/plain");
+      if (text) {
+        finish(text);
+      }
+    };
+    document.addEventListener("copy", copyListener, true);
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      originalWriteText = navigator.clipboard.writeText;
+      navigator.clipboard.writeText = async function(text) {
+        finish(text);
+        return originalWriteText.apply(this, arguments).catch(() => {});
+      };
     }
-  }
-  const text = await navigator.clipboard.readText().catch(() => "");
-  return text || "";
+
+    try {
+      copyBtn.click();
+    } catch (e) {
+      cleanup();
+      reject(e);
+      return;
+    }
+
+    timeoutId = setTimeout(() => {
+      if (!resolved) {
+        cleanup();
+        reject(new Error("コピータイムアウト"));
+      }
+    }, 5000);
+  });
 }
 
 window.MirrorChatUtils = {
