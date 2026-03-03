@@ -6,6 +6,7 @@
     const inputSel = cfg.inputSelector || "rich-textarea div[contenteditable='true'], div.ql-editor[contenteditable='true'], div[contenteditable='true'], textarea";
     const submitSel = cfg.submitButtonSelector || "button.send-button, button[aria-label='Send message'], button[mat-icon-button], button[type='submit']";
     const answerSel = cfg.answerContainerSelector || "main, [data-model-id]";
+    const copySel = cfg.copyButtonSelector || "button[aria-label='Copy'], [aria-label*='Copy']";
 
     (async () => {
       try {
@@ -28,8 +29,18 @@
           await new Promise((r) => setTimeout(r, 5000));
         }
 
-        const container = document.querySelector(answerSel);
-        const markdown = (utils.htmlToMarkdown && container) ? utils.htmlToMarkdown(container) : (container?.innerText || "");
+        let markdown = "";
+        if (utils.copyResponseViaClipboard) {
+          try {
+            markdown = await utils.copyResponseViaClipboard(copySel);
+          } catch (e) {
+            const container = document.querySelector(answerSel);
+            markdown = (utils.htmlToMarkdown && container) ? utils.htmlToMarkdown(container) : (container?.innerText || "");
+          }
+        } else {
+          const container = document.querySelector(answerSel);
+          markdown = (utils.htmlToMarkdown && container) ? utils.htmlToMarkdown(container) : (container?.innerText || "");
+        }
         sendResponse({ markdown });
       } catch (e) {
         sendResponse({ markdown: "", error: e.message || String(e) });

@@ -6,6 +6,7 @@
     const inputSel = cfg.inputSelector || "div#prompt-textarea, div.ProseMirror[contenteditable='true']";
     const submitSel = cfg.submitButtonSelector || "button#composer-submit-button, button[data-testid='send-button']";
     const answerSel = cfg.answerContainerSelector || "main div[data-testid='conversation-turns'], main";
+    const copySel = cfg.copyButtonSelector || "button[aria-label='Copy'], [data-testid*='copy']";
 
     (async () => {
       try {
@@ -49,8 +50,18 @@
           await new Promise((r) => setTimeout(r, 5000));
         }
 
-        const container = document.querySelector(answerSel);
-        const markdown = (utils.htmlToMarkdown && container) ? utils.htmlToMarkdown(container) : (container?.innerText || "");
+        let markdown = "";
+        if (utils.copyResponseViaClipboard) {
+          try {
+            markdown = await utils.copyResponseViaClipboard(copySel);
+          } catch (e) {
+            const container = document.querySelector(answerSel);
+            markdown = (utils.htmlToMarkdown && container) ? utils.htmlToMarkdown(container) : (container?.innerText || "");
+          }
+        } else {
+          const container = document.querySelector(answerSel);
+          markdown = (utils.htmlToMarkdown && container) ? utils.htmlToMarkdown(container) : (container?.innerText || "");
+        }
         sendResponse({ markdown });
       } catch (e) {
         sendResponse({ markdown: "", error: e.message || String(e) });

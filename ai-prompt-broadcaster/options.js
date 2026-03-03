@@ -22,6 +22,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         container.querySelector(".input-selector").value = cfg.inputSelector || "";
         container.querySelector(".submit-selector").value = cfg.submitButtonSelector || "";
         container.querySelector(".answer-selector").value = cfg.answerContainerSelector || "";
+        const copyEl = container.querySelector(".copy-selector");
+        if (copyEl) copyEl.value = cfg.copyButtonSelector || "";
       });
   }
 
@@ -39,11 +41,14 @@ document.addEventListener("DOMContentLoaded", async () => {
       .querySelectorAll(".ai-config")
       .forEach((container) => {
         const aiKey = container.getAttribute("data-ai");
-        partial.aiConfigs[aiKey] = {
+        const config = {
           inputSelector: container.querySelector(".input-selector").value.trim(),
           submitButtonSelector: container.querySelector(".submit-selector").value.trim(),
           answerContainerSelector: container.querySelector(".answer-selector").value.trim()
         };
+        const copyVal = (container.querySelector(".copy-selector")?.value || "").trim();
+        if (copyVal) config.copyButtonSelector = copyVal;
+        partial.aiConfigs[aiKey] = config;
       });
 
     await storage.saveSettings(partial);

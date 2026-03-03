@@ -222,6 +222,54 @@ async function clickSubmitOrEnter(submitSelector, inputElement, timeout = 8000) 
   return false;
 }
 
+/**
+ * コピーボタンをクリックしてクリップボードからAI応答テキストを取得する。
+ * 各AIチャットのコピーボタンは最新の応答をコピーするため、DOM抽出より正確。
+ *
+ * @param {string} copyButtonSelector - コピーボタンのセレクタ（複数マッチ時は最後の=最新応答のボタンを使用）
+ * @returns {Promise<string>} クリップボードから取得したテキスト
+ */
+async function copyResponseViaClipboard(copyButtonSelector) {
+  const selectors = (copyButtonSelector || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  let copyBtn = null;
+  for (const sel of selectors) {
+    try {
+      const btns = document.querySelectorAll(sel);
+      if (btns.length > 0) {
+        copyBtn = btns[btns.length - 1]; // 最後の=最新応答のコピーボタン
+        break;
+      }
+    } catch {
+      /* セレクタが不正な場合は無視 */
+    }
+  }
+
+  if (!copyBtn) {
+    throw new Error("コピーボタンが見つかりません");
+  }
+
+  copyBtn.scrollIntoView({ block: "center" });
+  await new Promise((r) => setTimeout(r, 100));
+
+  const previousClipboard = await navigator.clipboard.readText().catch(() => "");
+
+  copyBtn.click();
+
+  for (let i = 0; i < 10; i++) {
+    await new Promise((r) => setTimeout(r, 200 + i * 100));
+    const text = await navigator.clipboard.readText().catch(() => "");
+    if (text && text !== previousClipboard && text.length > 10) {
+      return text;
+    }
+  }
+  const text = await navigator.clipboard.readText().catch(() => "");
+  return text || "";
+}
+
 window.MirrorChatUtils = {
   htmlToMarkdown,
   waitFor,
@@ -229,5 +277,6 @@ window.MirrorChatUtils = {
   humanDelay,
   simulateInput,
   pressEnterToSubmit,
-  clickSubmitOrEnter
+  clickSubmitOrEnter,
+  copyResponseViaClipboard
 };

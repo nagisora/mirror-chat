@@ -19,7 +19,8 @@
     "storage",
     "tabs",
     "scripting",
-    "notifications"
+    "notifications",
+    "clipboardRead"
   ],
   "host_permissions": [
     "*://chat.openai.com/*",

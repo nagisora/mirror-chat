@@ -4,6 +4,7 @@
     const cfg = msg.config || {};
     const inputSel = cfg.inputSelector || "div[contenteditable='true'], textarea";
     const answerSel = cfg.answerContainerSelector || "main, article";
+    const copySel = cfg.copyButtonSelector || "button[aria-label='Copy'], [aria-label*='Copy']";
 
     (async () => {
       try {
@@ -27,8 +28,18 @@
           await new Promise((r) => setTimeout(r, 6000));
         }
 
-        const container = document.querySelector(answerSel);
-        const markdown = (utils.htmlToMarkdown && container) ? utils.htmlToMarkdown(container) : (container?.innerText || "");
+        let markdown = "";
+        if (utils.copyResponseViaClipboard) {
+          try {
+            markdown = await utils.copyResponseViaClipboard(copySel);
+          } catch (e) {
+            const container = document.querySelector(answerSel);
+            markdown = (utils.htmlToMarkdown && container) ? utils.htmlToMarkdown(container) : (container?.innerText || "");
+          }
+        } else {
+          const container = document.querySelector(answerSel);
+          markdown = (utils.htmlToMarkdown && container) ? utils.htmlToMarkdown(container) : (container?.innerText || "");
+        }
         sendResponse({ markdown });
       } catch (e) {
         sendResponse({ markdown: "", error: e.message || String(e) });

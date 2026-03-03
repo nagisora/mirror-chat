@@ -7,6 +7,7 @@
     // 送信ボタン: Button_claude クラスで特定（aria-label はロケール依存のため使わない）
     const submitSel = cfg.submitButtonSelector || "button[class*='Button_claude'], div.shrink-0 button[aria-label]";
     const answerSel = cfg.answerContainerSelector || "[data-testid='conversation-thread'], main, [class*='message']";
+    const copySel = cfg.copyButtonSelector || "[data-testid='action-bar-copy'], button[aria-label='Copy']";
 
     (async () => {
       try {
@@ -30,8 +31,18 @@
           await new Promise((r) => setTimeout(r, 5000));
         }
 
-        const container = document.querySelector(answerSel);
-        const markdown = (utils.htmlToMarkdown && container) ? utils.htmlToMarkdown(container) : (container?.innerText || "");
+        let markdown = "";
+        if (utils.copyResponseViaClipboard) {
+          try {
+            markdown = await utils.copyResponseViaClipboard(copySel);
+          } catch (e) {
+            const container = document.querySelector(answerSel);
+            markdown = (utils.htmlToMarkdown && container) ? utils.htmlToMarkdown(container) : (container?.innerText || "");
+          }
+        } else {
+          const container = document.querySelector(answerSel);
+          markdown = (utils.htmlToMarkdown && container) ? utils.htmlToMarkdown(container) : (container?.innerText || "");
+        }
         sendResponse({ markdown });
       } catch (e) {
         sendResponse({ markdown: "", error: e.message || String(e) });
