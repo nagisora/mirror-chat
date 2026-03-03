@@ -10,7 +10,7 @@
     aiConfigs: {
       chatgpt: {
         name: "ChatGPT",
-        url: "https://chat.openai.com/",
+        url: "https://chatgpt.com/",
         inputSelector: "div#prompt-textarea, div.ProseMirror[contenteditable='true']",
         submitButtonSelector: "button#composer-submit-button, button[data-testid='send-button']",
         answerContainerSelector: "main div[data-testid='conversation-turns'], main",

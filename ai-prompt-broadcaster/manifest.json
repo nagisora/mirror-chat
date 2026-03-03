@@ -23,6 +23,7 @@
   ],
   "host_permissions": [
     "*://chat.openai.com/*",
+    "*://chatgpt.com/*",
     "*://claude.ai/*",
     "*://gemini.google.com/*",
     "*://grok.com/*",
