@@ -18,7 +18,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           return;
         }
       } catch (e) {
-        console.warn("navigator.clipboard.readText failed, trying fallback:", e);
+        // 一部環境では navigator.clipboard.readText() が DOMException を投げることがあるが、
+        // フォールバックで確実に処理するため、ここでは情報レベルのログに留める。
+        console.info(
+          "MirrorChat: navigator.clipboard.readText failed, falling back to execCommand('paste'):",
+          e && (e.message || String(e))
+        );
       }
 
       // 2. 失敗した場合は execCommand("paste") にフォールバック
