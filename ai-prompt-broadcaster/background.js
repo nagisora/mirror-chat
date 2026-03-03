@@ -144,6 +144,28 @@ async function processOneTask(aiKey, prompt, settings) {
 
   notifyAIStatus(aiKey, "sending");
 
+  // 対象タブとウィンドウにフォーカスを当てる（クリップボードAPI等へのフォーカス対策）
+  try {
+    await new Promise((r) => chrome.tabs.update(tabId, { active: true }, () => {
+      void chrome.runtime.lastError;
+      r();
+    }));
+    const tab = await new Promise((r) => chrome.tabs.get(tabId, (t) => {
+      void chrome.runtime.lastError;
+      r(t);
+    }));
+    if (tab && tab.windowId) {
+      await new Promise((r) => chrome.windows.update(tab.windowId, { focused: true }, () => {
+        void chrome.runtime.lastError;
+        r();
+      }));
+    }
+    // フォーカスが当たるまで少し待機
+    await new Promise((r) => setTimeout(r, 500));
+  } catch (e) {
+    console.warn("MirrorChat: focus tab failed", e);
+  }
+
   return new Promise((resolve) => {
     const timeoutId = setTimeout(() => {
       notifyAIStatus(aiKey, "error");
