@@ -534,6 +534,67 @@ async function getResponseText(copyButtonSelector, answerContainerSelector) {
   return "";
 }
 
+/**
+ * 応答完了待ちとテキスト取得をまとめて行うヘルパー。
+ * 各 content script 側ではサービス固有のセレクタだけを指定すればよい。
+ *
+ * @param {string} copyButtonSelector - コピーボタンのセレクタ
+ * @param {string} answerContainerSelector - 回答コンテナのセレクタ
+ * @param {string} doneCheckSelector - 応答中に表示される要素のセレクタ（例: 停止ボタン）
+ * @param {number} maxWaitMs - 応答完了までの最大待機時間
+ * @param {number} stableMs - DOM安定とみなす無変更時間
+ * @returns {Promise<string>} 取得したテキスト
+ */
+async function fetchResponseTextWithWait(
+  copyButtonSelector,
+  answerContainerSelector,
+  doneCheckSelector,
+  maxWaitMs = 15000,
+  stableMs = 1500
+) {
+  // 回答は基本的に出揃っている前提だが、安全のため短めの完了待ちを入れる
+  if (typeof waitForResponseComplete === "function") {
+    await waitForResponseComplete(
+      answerContainerSelector,
+      doneCheckSelector,
+      maxWaitMs,
+      stableMs
+    );
+  } else if (typeof waitForStable === "function") {
+    await waitForStable(answerContainerSelector, stableMs);
+  } else {
+    await new Promise((r) => setTimeout(r, stableMs));
+  }
+
+  // 応答テキストを取得（コピーボタン → DOM フォールバック）
+  let markdown = "";
+  if (typeof getResponseText === "function") {
+    markdown = await getResponseText(copyButtonSelector, answerContainerSelector);
+  } else if (typeof copyResponseViaClipboard === "function") {
+    try {
+      markdown = await copyResponseViaClipboard(copyButtonSelector);
+    } catch (e) {
+      const container = answerContainerSelector
+        ? document.querySelector(answerContainerSelector)
+        : null;
+      markdown =
+        typeof htmlToMarkdown === "function" && container
+          ? htmlToMarkdown(container)
+          : container?.innerText || "";
+    }
+  } else {
+    const container = answerContainerSelector
+      ? document.querySelector(answerContainerSelector)
+      : null;
+    markdown =
+      typeof htmlToMarkdown === "function" && container
+        ? htmlToMarkdown(container)
+        : container?.innerText || "";
+  }
+
+  return markdown;
+}
+
 window.MirrorChatUtils = {
   htmlToMarkdown,
   waitFor,
@@ -545,5 +606,6 @@ window.MirrorChatUtils = {
   clickSubmitOrEnter,
   copyResponseViaClipboard,
   extractLatestResponseFromDOM,
-  getResponseText
+  getResponseText,
+  fetchResponseTextWithWait
 };

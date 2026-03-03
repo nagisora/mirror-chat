@@ -40,38 +40,19 @@
     // フェーズ2: 応答完了待ち＋テキスト取得のみ
     if (msg.type === "MIRRORCHAT_FETCH_ONLY") {
       (async () => {
+        const utils = window.MirrorChatUtils || {};
         try {
-          const utils = window.MirrorChatUtils || {};
-
-          // 回答は基本的に出揃っている前提だが、安全のため短めの完了待ちを入れる
-          if (utils.waitForResponseComplete) {
-            await utils.waitForResponseComplete(answerSel, doneSel, 15000, 1500);
-          } else if (utils.waitForStable) {
-            await utils.waitForStable(answerSel, 1500);
-          } else {
-            await new Promise((r) => setTimeout(r, 1500));
-          }
-
-          // 応答テキストを取得
           let markdown = "";
-          if (utils.getResponseText) {
+          if (utils.fetchResponseTextWithWait) {
+            markdown = await utils.fetchResponseTextWithWait(
+              copySel,
+              answerSel,
+              doneSel,
+              15000,
+              1500
+            );
+          } else if (utils.getResponseText) {
             markdown = await utils.getResponseText(copySel, answerSel);
-          } else if (utils.copyResponseViaClipboard) {
-            try {
-              markdown = await utils.copyResponseViaClipboard(copySel);
-            } catch (e) {
-              const container = document.querySelector(answerSel);
-              markdown =
-                utils.htmlToMarkdown && container
-                  ? utils.htmlToMarkdown(container)
-                  : container?.innerText || "";
-            }
-          } else {
-            const container = document.querySelector(answerSel);
-            markdown =
-              utils.htmlToMarkdown && container
-                ? utils.htmlToMarkdown(container)
-                : container?.innerText || "";
           }
           sendResponse({ markdown });
         } catch (e) {
