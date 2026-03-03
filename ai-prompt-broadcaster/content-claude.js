@@ -52,21 +52,12 @@
         try {
           const utils = window.MirrorChatUtils || {};
 
-          // 応答が完了するまで待つ
-          if (utils.waitForResponseComplete) {
-            // Claude も長めのストリーミングになることが多いため、待機を Gemini / Grok と揃えて延長
-            await utils.waitForResponseComplete(answerSel, doneSel, 120000, 8000);
-          } else if (utils.waitForStable) {
-            await utils.waitForStable(answerSel, 8000);
+          // 回答はユーザー操作で「出揃っている」前提のため、
+          // 長時間の待機はせず、短時間だけDOMの安定を待つ
+          if (utils.waitForStable) {
+            await utils.waitForStable(answerSel, 1000);
           } else {
-            await new Promise((r) => setTimeout(r, 8000));
-          }
-
-          // 念のため完了後も少し待ってからコピーする（ボタン状態の反映待ち）
-          if (utils.humanDelay) {
-            await utils.humanDelay(1500, 2500);
-          } else {
-            await new Promise((r) => setTimeout(r, 2000));
+            await new Promise((r) => setTimeout(r, 1000));
           }
 
           // 応答テキストを取得

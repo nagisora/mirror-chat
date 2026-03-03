@@ -393,6 +393,12 @@ async function runTask(task) {
     }
   }
 
+  // ステータスメッセージを完了状態に更新（最後の「Grok の回答を取得中です...」を上書き）
+  chrome.runtime.sendMessage?.({
+    type: "MIRRORCHAT_STATUS",
+    text: "回答の取得と Obsidian への保存が完了しました。"
+  });
+
   // 質問フローが完了したので現在のタスク情報をクリアする
   try {
     await new Promise((resolve) => chrome.storage.local.remove(CURRENT_TASK_KEY, resolve));
