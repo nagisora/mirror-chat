@@ -1,4 +1,22 @@
 document.addEventListener("DOMContentLoaded", async () => {
+  // 拡張ポップアップ上では一部環境で日本語IMEが正しく動作しないことがあるため、
+  // 初回起動時は自動的に同じUIを専用タブ（standalone）として開き、ポップアップ自体はすぐ閉じる。
+  // standalone モード（?standalone=1）ではこのリダイレクトは行わない。
+  try {
+    const search = window.location.search || "";
+    const params = new URLSearchParams(search);
+    const isStandalone = params.get("standalone") === "1";
+    if (!isStandalone && chrome?.tabs?.create && chrome?.runtime?.getURL) {
+      const url = chrome.runtime.getURL("popup.html?standalone=1");
+      chrome.tabs.create({ url });
+      window.close();
+      return;
+    }
+  } catch (e) {
+    // ここでの失敗は致命的ではないので、通常のポップアップとして続行する
+    console.warn("MirrorChat: standalone モードへの切り替えに失敗しました:", e);
+  }
+
   const promptInput = document.getElementById("prompt-input");
   const sendButton = document.getElementById("send-button");
   const openTabsButton = document.getElementById("open-tabs-button");
