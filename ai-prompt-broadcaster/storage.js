@@ -14,7 +14,7 @@
         inputSelector: "div#prompt-textarea, div.ProseMirror[contenteditable='true']",
         submitButtonSelector: "button#composer-submit-button, button[data-testid='send-button']",
         answerContainerSelector: "main div[data-testid='conversation-turns'], main",
-        copyButtonSelector: "button[aria-label='Copy'], [data-testid*='copy']",
+        copyButtonSelector: "button[aria-label='Copy'], [aria-label*='Copy'], [aria-label*='コピー'], [data-testid*='copy']",
         doneCheckSelector: "button[data-testid='stop-button']"
       },
       claude: {
@@ -23,7 +23,7 @@
         inputSelector: "div[data-testid='chat-input'], div.tiptap.ProseMirror[contenteditable='true'], .ProseMirror[contenteditable='true']",
         submitButtonSelector: "button[class*='Button_claude'], div.shrink-0 button[aria-label]",
         answerContainerSelector: "[data-testid='conversation-thread'], main",
-        copyButtonSelector: "[data-testid='action-bar-copy'], button[aria-label='Copy']",
+        copyButtonSelector: "[data-testid='action-bar-copy'], button[aria-label='Copy'], [aria-label*='Copy'], [aria-label*='コピー']",
         doneCheckSelector: ""
       },
       gemini: {
@@ -32,7 +32,7 @@
         inputSelector: "rich-textarea div[contenteditable='true'], div[contenteditable='true'], textarea",
         submitButtonSelector: "button.send-button, button[aria-label='Send message'], button[type='submit']",
         answerContainerSelector: "main",
-        copyButtonSelector: "button[aria-label='Copy'], [aria-label*='Copy']",
+        copyButtonSelector: "button[aria-label='Copy'], [aria-label*='Copy'], [aria-label*='コピー'], [data-testid*='copy']",
         doneCheckSelector: ""
       },
       grok: {
@@ -41,7 +41,7 @@
         inputSelector: "div[contenteditable='true'], textarea",
         submitButtonSelector: "button[type='submit'], button[aria-label='Send'], form button",
         answerContainerSelector: "main, article",
-        copyButtonSelector: "button[aria-label='Copy'], [aria-label*='Copy']",
+        copyButtonSelector: "button[aria-label='Copy'], [aria-label*='Copy'], [aria-label*='コピー'], [data-testid*='copy']",
         doneCheckSelector: ""
       }
     }

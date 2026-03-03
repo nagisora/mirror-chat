@@ -267,14 +267,29 @@ async function clickSubmitOrEnter(submitSelector, inputElement, timeout = 8000) 
  * @param {string} copyButtonSelector - コピーボタンのセレクタ（複数マッチ時は最後の=最新応答のボタンを使用）
  * @returns {Promise<string>} クリップボードから取得したテキスト
  */
+const GLOBAL_COPY_BUTTON_FALLBACKS = [
+  "button[aria-label='Copy']",
+  "[aria-label*='Copy']",
+  "[aria-label*='コピー']",
+  "[data-testid*='copy']",
+  "[data-testid='action-bar-copy']",
+  "button[title*='Copy']",
+  "button[title*='コピー']",
+  "[data-testid='copy-button']",
+  "button[aria-label='Copy code']",
+  "[role='button'][aria-label*='Copy']"
+];
+
 async function copyResponseViaClipboard(copyButtonSelector) {
   const selectors = (copyButtonSelector || "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
 
+  const allSelectors = [...selectors, ...GLOBAL_COPY_BUTTON_FALLBACKS];
+
   let copyBtn = null;
-  for (const sel of selectors) {
+  for (const sel of allSelectors) {
     try {
       const btns = document.querySelectorAll(sel);
       if (btns.length > 0) {
@@ -287,7 +302,7 @@ async function copyResponseViaClipboard(copyButtonSelector) {
   }
 
   if (!copyBtn) {
-    throw new Error("コピーボタンが見つかりません: " + copyButtonSelector);
+    throw new Error("コピーボタンが見つかりません: " + (copyButtonSelector || "(フォールバック含む)"));
   }
 
   copyBtn.scrollIntoView({ block: "center" });
@@ -356,34 +371,43 @@ async function copyResponseViaClipboard(copyButtonSelector) {
       return;
     }
 
-    // 方法3: タイムアウト後、オフスクリーンドキュメント経由でクリップボード読み取りを試行
-    // Content Script の navigator.clipboard.readText() はページコンテキストで実行されるため、
-    // 「クリップボードの取得を許可しますか？」ダイアログが出て「許可」しても動作しない問題がある。
-    // オフスクリーンドキュメントは拡張コンテキストで動作するため、ダイアログなしで読み取り可能。
-    timeoutId = setTimeout(async () => {
-      if (resolved) return;
-
-      try {
-        const resp = await new Promise((r) => {
-          chrome.runtime.sendMessage({ type: "MIRRORCHAT_READ_CLIPBOARD" }, (response) => {
-            if (chrome.runtime.lastError) {
-              r({ ok: false, error: chrome.runtime.lastError.message });
-            } else {
-              r(response || { ok: false });
-            }
-          });
+    // 方法3: オフスクリーンドキュメント経由でクリップボード読み取りを複数回試行
+    // コピーは非同期で完了する場合があるため、複数タイミングで試行する
+    const readOffscreenClipboard = () =>
+      new Promise((r) => {
+        chrome.runtime.sendMessage({ type: "MIRRORCHAT_READ_CLIPBOARD" }, (response) => {
+          if (chrome.runtime.lastError) {
+            r({ ok: false, error: chrome.runtime.lastError.message });
+          } else {
+            r(response || { ok: false });
+          }
         });
+      });
+
+    const tryOffscreenRead = async () => {
+      if (resolved) return;
+      try {
+        const resp = await readOffscreenClipboard();
         if (resp?.ok && resp.text && resp.text.length > 0) {
           finish(resp.text);
-          return;
         }
       } catch {
-        // オフスクリーン経由の読み取りも失敗
+        /* 読み取り失敗 */
       }
+    };
 
+    const attempts = [400, 900, 1600, 2500, 4000];
+    attempts.forEach((ms) => {
+      setTimeout(() => tryOffscreenRead(), ms);
+    });
+
+    timeoutId = setTimeout(async () => {
+      if (resolved) return;
+      await tryOffscreenRead();
+      if (resolved) return;
       cleanup();
       reject(new Error("コピータイムアウト: テキストを取得できませんでした"));
-    }, 5000);
+    }, 5500);
   });
 }
 
@@ -408,18 +432,24 @@ function extractLatestResponseFromDOM(answerContainerSelector) {
 
       // メッセージブロックを探す（一般的なパターン）
       // ChatGPT: [data-message-author-role="assistant"]
-      // Claude: div.font-claude-message, [data-is-streaming]
-      // Gemini: message-content, model-response
+      // Claude: div.font-claude-message, [data-testid='message-content']
+      // Gemini: message-content, model-response, [data-model-id]
       // Grok: 各メッセージブロック
       const messageSelectors = [
         "[data-message-author-role='assistant']",
         "div.font-claude-message",
         "[data-testid='chat-message-content']",
+        "[data-testid='message-content']",
+        "[data-testid='conversation-turn']",
         "message-content",
         "model-response",
+        "[data-model-id]",
         ".markdown",
         ".prose",
         "article",
+        "[class*='message']",
+        "[class*='response']",
+        "[class*='assistant']",
       ];
 
       for (const msgSel of messageSelectors) {
