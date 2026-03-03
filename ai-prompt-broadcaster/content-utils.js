@@ -262,7 +262,7 @@ async function clickSubmitOrEnter(submitSelector, inputElement, timeout = 8000) 
  * 取得手順:
  * 1. navigator.clipboard.writeText をインターセプトして書き込まれるテキストを横取り
  * 2. copy イベントリスナーで clipboardData を取得
- * 3. タイムアウト後はフォールバックとして navigator.clipboard.readText を試行
+ * 3. タイムアウト後はオフスクリーンドキュメント経由でクリップボード読み取りを試行
  *
  * @param {string} copyButtonSelector - コピーボタンのセレクタ（複数マッチ時は最後の=最新応答のボタンを使用）
  * @returns {Promise<string>} クリップボードから取得したテキスト
@@ -356,21 +356,29 @@ async function copyResponseViaClipboard(copyButtonSelector) {
       return;
     }
 
-    // 方法3: タイムアウト後、readText を試行してからフォールバック
+    // 方法3: タイムアウト後、オフスクリーンドキュメント経由でクリップボード読み取りを試行
+    // Content Script の navigator.clipboard.readText() はページコンテキストで実行されるため、
+    // 「クリップボードの取得を許可しますか？」ダイアログが出て「許可」しても動作しない問題がある。
+    // オフスクリーンドキュメントは拡張コンテキストで動作するため、ダイアログなしで読み取り可能。
     timeoutId = setTimeout(async () => {
       if (resolved) return;
 
-      // readText フォールバック
       try {
-        if (navigator.clipboard && navigator.clipboard.readText) {
-          const text = await navigator.clipboard.readText();
-          if (text && text.length > 0) {
-            finish(text);
-            return;
-          }
+        const resp = await new Promise((r) => {
+          chrome.runtime.sendMessage({ type: "MIRRORCHAT_READ_CLIPBOARD" }, (response) => {
+            if (chrome.runtime.lastError) {
+              r({ ok: false, error: chrome.runtime.lastError.message });
+            } else {
+              r(response || { ok: false });
+            }
+          });
+        });
+        if (resp?.ok && resp.text && resp.text.length > 0) {
+          finish(resp.text);
+          return;
         }
       } catch {
-        // readText も失敗
+        // オフスクリーン経由の読み取りも失敗
       }
 
       cleanup();

@@ -299,7 +299,54 @@ function processNext() {
   });
 }
 
+const OFFSCREEN_DOCUMENT_PATH = "offscreen.html";
+let offscreenCreating = null;
+
+async function ensureOffscreenDocument() {
+  const existingContexts = await chrome.runtime.getContexts({
+    contextTypes: ["OFFSCREEN_DOCUMENT"],
+    documentUrls: [chrome.runtime.getURL(OFFSCREEN_DOCUMENT_PATH)]
+  });
+  if (existingContexts.length > 0) return;
+
+  if (offscreenCreating) {
+    await offscreenCreating;
+    return;
+  }
+  offscreenCreating = chrome.offscreen.createDocument({
+    url: OFFSCREEN_DOCUMENT_PATH,
+    reasons: ["CLIPBOARD"],
+    justification: "AI応答テキストをクリップボードから取得するため"
+  });
+  await offscreenCreating;
+  offscreenCreating = null;
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === "MIRRORCHAT_READ_CLIPBOARD") {
+    ensureOffscreenDocument()
+      .then(() => {
+        chrome.runtime.sendMessage(
+          { type: "MIRRORCHAT_READ_CLIPBOARD_INTERNAL" },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              sendResponse({ ok: false, error: chrome.runtime.lastError.message });
+              return;
+            }
+            if (response?.ok) {
+              sendResponse({ ok: true, text: response.text ?? "" });
+            } else {
+              sendResponse({ ok: false, error: response?.error ?? "Unknown" });
+            }
+          }
+        );
+      })
+      .catch((e) => {
+        sendResponse({ ok: false, error: e?.message ?? String(e) });
+      });
+    return true;
+  }
+
   if (msg.type === "MIRRORCHAT_OPEN_TABS") {
     openAITabs().then((tabs) => {
       sendResponse({ ok: true, openTabs: tabs });

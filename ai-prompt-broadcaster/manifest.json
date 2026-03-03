@@ -21,7 +21,8 @@
     "scripting",
     "notifications",
     "clipboardRead",
-    "clipboardWrite"
+    "clipboardWrite",
+    "offscreen"
   ],
   "host_permissions": [
     "*://chat.openai.com/*",
