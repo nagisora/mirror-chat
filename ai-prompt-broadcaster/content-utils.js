@@ -513,6 +513,22 @@ async function getResponseText(copyButtonSelector, answerContainerSelector) {
     }
   }
 
+  // 方法4: ページ全体からの最終フォールバック
+  try {
+    const root =
+      document.querySelector("main") ||
+      document.querySelector("[role='main']") ||
+      document.body;
+    if (root) {
+      const pageText = htmlToMarkdown(root);
+      if (pageText && pageText.trim().length > 0) {
+        return pageText;
+      }
+    }
+  } catch {
+    // ここでの失敗は最終手段なのでそのまま空文字を返す
+  }
+
   return "";
 }
 
