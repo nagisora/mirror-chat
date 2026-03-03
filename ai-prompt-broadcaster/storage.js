@@ -3,9 +3,9 @@
 
   const defaultSettings = {
     obsidian: {
-      baseUrl: "http://127.0.0.1:27123",
+      baseUrl: "https://127.0.0.1:27124/",
       token: "",
-      rootPath: "AI-Research"
+      rootPath: "200-AI Research"
     },
     aiConfigs: {
       chatgpt: {

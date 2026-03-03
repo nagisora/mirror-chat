@@ -42,7 +42,7 @@ mkdir -p /home/ubuntu/ObsidianVault
 /tmp/squashfs-root/obsidian --no-sandbox --disable-gpu &
 ```
 
-起動後、GUI で Vault を `/home/ubuntu/ObsidianVault` に設定し、Community Plugins から「Local REST API」をインストール・有効化する。Settings で HTTP (非暗号化) サーバーを有効にする（ポート 27123）。
+起動後、GUI で Vault を `/home/ubuntu/ObsidianVault` に設定し、Community Plugins から「Local REST API」をインストール・有効化する。Settings で HTTPS サーバーを有効にする（デフォルトポート 27124）。
 
 ### テスト・リント
 
