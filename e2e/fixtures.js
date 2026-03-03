@@ -19,7 +19,6 @@ const userDataDir =
 const test = base.extend({
   context: async ({}, use) => {
     const context = await chromium.launchPersistentContext(userDataDir, {
-      // Chrome/Edge は拡張読み込み用フラグを削除したため、Playwright 同梱の Chromium を使用
       headless: !!process.env.CI,
       args: [
         `--disable-extensions-except=${pathToExtension}`,
