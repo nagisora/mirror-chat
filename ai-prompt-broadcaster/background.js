@@ -135,6 +135,44 @@ function closeAITabs() {
   }
 }
 
+async function focusMirrorChatTab() {
+  return new Promise((resolve) => {
+    try {
+      const baseUrl = chrome.runtime.getURL("popup.html");
+      const pattern = `${baseUrl}*`;
+      chrome.tabs.query({ url: pattern }, (tabs) => {
+        if (chrome.runtime.lastError || !tabs || tabs.length === 0) {
+          resolve();
+          return;
+        }
+        const tab = tabs[0];
+        if (!tab || !tab.id) {
+          resolve();
+          return;
+        }
+        const windowId = tab.windowId;
+        if (windowId) {
+          chrome.windows.update(windowId, { focused: true }, () => {
+            void chrome.runtime.lastError;
+            chrome.tabs.update(tab.id, { active: true }, () => {
+              void chrome.runtime.lastError;
+              resolve();
+            });
+          });
+        } else {
+          chrome.tabs.update(tab.id, { active: true }, () => {
+            void chrome.runtime.lastError;
+            resolve();
+          });
+        }
+      });
+    } catch (e) {
+      // ここでの失敗は致命的でないので無視
+      resolve();
+    }
+  });
+}
+
 async function sendPromptToAI(aiKey, prompt, settings) {
   const cfg = settings.aiConfigs?.[aiKey];
   const tabId = openTabs[aiKey];
@@ -398,6 +436,13 @@ async function runTask(task) {
     type: "MIRRORCHAT_STATUS",
     text: "回答の取得と Obsidian への保存が完了しました。"
   });
+
+  // 可能であれば MirrorChat のタブにフォーカスを戻す
+  try {
+    await focusMirrorChatTab();
+  } catch (e) {
+    console.warn("MirrorChat: MirrorChatタブへのフォーカス復帰に失敗しました:", e);
+  }
 
   // 質問フローが完了したので現在のタスク情報をクリアする
   try {
