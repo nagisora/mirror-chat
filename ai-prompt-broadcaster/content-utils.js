@@ -267,7 +267,9 @@ async function clickSubmitOrEnter(submitSelector, inputElement, timeout = 8000) 
  * @param {string} copyButtonSelector - コピーボタンのセレクタ（複数マッチ時は最後の=最新応答のボタンを使用）
  * @returns {Promise<string>} クリップボードから取得したテキスト
  */
-const GLOBAL_COPY_BUTTON_FALLBACKS = [
+// content-utils.js は同じタブに複数回インジェクトされる可能性があるため、
+// const ではなく var + 既存値チェックで多重定義エラーを避ける
+var GLOBAL_COPY_BUTTON_FALLBACKS = GLOBAL_COPY_BUTTON_FALLBACKS || [
   "button[aria-label='Copy']",
   "[aria-label*='Copy']",
   "[aria-label*='コピー']",
