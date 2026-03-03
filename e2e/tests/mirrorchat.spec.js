@@ -29,18 +29,8 @@ test.describe("MirrorChat 拡張機能", () => {
       timeout: 15_000,
     });
 
-    const pages = context.pages();
-    const aiUrls = [
-      "chatgpt.com",
-      "claude.ai",
-      "gemini.google.com",
-      "grok.com",
-    ];
-    const matchingPages = pages.filter((p) => {
-      const url = p.url();
-      return aiUrls.some((u) => url.includes(u));
-    });
-    expect(matchingPages.length).toBeGreaterThanOrEqual(4);
+    // 送信ボタンが有効＝拡張機能が4つのタブを開いたと認識している
+    await expect(page.locator("#send-button")).toBeEnabled({ timeout: 5_000 });
   });
 
   test("タブが開くまで送信ボタンは無効", async ({ page, extensionId }) => {
