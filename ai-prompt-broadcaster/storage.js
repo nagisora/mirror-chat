@@ -3,7 +3,7 @@
 
   const defaultSettings = {
     obsidian: {
-      baseUrl: "https://127.0.0.1:27124/",
+      baseUrl: "http://127.0.0.1:27123/",
       token: "",
       rootPath: "200-AI Research"
     },
