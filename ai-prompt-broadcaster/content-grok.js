@@ -25,11 +25,18 @@
 
         // 応答が完了するまで待つ
         if (utils.waitForResponseComplete) {
-          await utils.waitForResponseComplete(answerSel, doneSel, 90000, 5000);
+          await utils.waitForResponseComplete(answerSel, doneSel, 120000, 8000);
         } else if (utils.waitForStable) {
-          await utils.waitForStable(answerSel, 4000);
+          await utils.waitForStable(answerSel, 8000);
         } else {
-          await new Promise((r) => setTimeout(r, 6000));
+          await new Promise((r) => setTimeout(r, 8000));
+        }
+
+        // 念のため完了後も少し待ってからコピーする（ボタン状態の反映待ち）
+        if (utils.humanDelay) {
+          await utils.humanDelay(1500, 2500);
+        } else {
+          await new Promise((r) => setTimeout(r, 2000));
         }
 
         // 応答テキストを取得
