@@ -1,66 +1,97 @@
 (function () {
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg.type !== "MIRRORCHAT_START") return;
     const cfg = msg.config || {};
     // Gemini: rich-textarea 内の contenteditable、または Quill-like エディタ
-    const inputSel = cfg.inputSelector || "rich-textarea div[contenteditable='true'], div.ql-editor[contenteditable='true'], div[contenteditable='true'], textarea";
-    const submitSel = cfg.submitButtonSelector || "button.send-button, button[aria-label='Send message'], button[mat-icon-button], button[type='submit']";
+    const inputSel =
+      cfg.inputSelector ||
+      "rich-textarea div[contenteditable='true'], div.ql-editor[contenteditable='true'], div[contenteditable='true'], textarea";
+    const submitSel =
+      cfg.submitButtonSelector ||
+      "button.send-button, button[aria-label='Send message'], button[mat-icon-button], button[type='submit']";
     const answerSel = cfg.answerContainerSelector || "main, [data-model-id]";
     const copySel = cfg.copyButtonSelector || "button[aria-label='Copy'], [aria-label*='Copy']";
-    const doneSel = cfg.doneCheckSelector || "button[aria-label='Stop'], mat-icon[data-mat-icon-name='stop_circle']";
+    const doneSel =
+      cfg.doneCheckSelector || "button[aria-label='Stop'], mat-icon[data-mat-icon-name='stop_circle']";
 
-    (async () => {
-      try {
-        const utils = window.MirrorChatUtils || {};
-        const input = await (utils.waitFor ? utils.waitFor(inputSel) : Promise.resolve(document.querySelector(inputSel)));
-        if (!input) {
-          sendResponse({ markdown: "", error: "入力欄が見つかりません" });
-          return;
-        }
-
-        utils.simulateInput(input, msg.prompt);
-
-        await (utils.humanDelay ? utils.humanDelay(2000, 3500) : new Promise((r) => setTimeout(r, 2500)));
-
-        await utils.clickSubmitOrEnter(submitSel, input);
-
-        // 応答が完了するまで待つ
-        if (utils.waitForResponseComplete) {
-          // Gemini はストリーミングが長く続くことがあるため、待機をやや長めにする
-          await utils.waitForResponseComplete(answerSel, doneSel, 120000, 8000);
-        } else if (utils.waitForStable) {
-          await utils.waitForStable(answerSel, 8000);
-        } else {
-          await new Promise((r) => setTimeout(r, 8000));
-        }
-
-        // 念のため完了後も少し待ってからコピーする（ボタン状態の反映待ち）
-        if (utils.humanDelay) {
-          await utils.humanDelay(1500, 2500);
-        } else {
-          await new Promise((r) => setTimeout(r, 2000));
-        }
-
-        // 応答テキストを取得
-        let markdown = "";
-        if (utils.getResponseText) {
-          markdown = await utils.getResponseText(copySel, answerSel);
-        } else if (utils.copyResponseViaClipboard) {
-          try {
-            markdown = await utils.copyResponseViaClipboard(copySel);
-          } catch (e) {
-            const container = document.querySelector(answerSel);
-            markdown = (utils.htmlToMarkdown && container) ? utils.htmlToMarkdown(container) : (container?.innerText || "");
+    // フェーズ1: プロンプト入力＋送信のみ
+    if (msg.type === "MIRRORCHAT_SEND_ONLY") {
+      (async () => {
+        try {
+          const utils = window.MirrorChatUtils || {};
+          const input = await (utils.waitFor
+            ? utils.waitFor(inputSel)
+            : Promise.resolve(document.querySelector(inputSel)));
+          if (!input) {
+            sendResponse({ ok: false, error: "入力欄が見つかりません" });
+            return;
           }
-        } else {
-          const container = document.querySelector(answerSel);
-          markdown = (utils.htmlToMarkdown && container) ? utils.htmlToMarkdown(container) : (container?.innerText || "");
+
+          utils.simulateInput(input, msg.prompt);
+
+          await (utils.humanDelay
+            ? utils.humanDelay(2000, 3500)
+            : new Promise((r) => setTimeout(r, 2500)));
+
+          await utils.clickSubmitOrEnter(submitSel, input);
+
+          sendResponse({ ok: true });
+        } catch (e) {
+          sendResponse({ ok: false, error: e.message || String(e) });
         }
-        sendResponse({ markdown });
-      } catch (e) {
-        sendResponse({ markdown: "", error: e.message || String(e) });
-      }
-    })();
-    return true;
+      })();
+      return true;
+    }
+
+    // フェーズ2: 応答完了待ち＋テキスト取得のみ
+    if (msg.type === "MIRRORCHAT_FETCH_ONLY") {
+      (async () => {
+        try {
+          const utils = window.MirrorChatUtils || {};
+
+          // 応答が完了するまで待つ
+          if (utils.waitForResponseComplete) {
+            // Gemini はストリーミングが長く続くことがあるため、待機をやや長めにする
+            await utils.waitForResponseComplete(answerSel, doneSel, 120000, 8000);
+          } else if (utils.waitForStable) {
+            await utils.waitForStable(answerSel, 8000);
+          } else {
+            await new Promise((r) => setTimeout(r, 8000));
+          }
+
+          // 念のため完了後も少し待ってからコピーする（ボタン状態の反映待ち）
+          if (utils.humanDelay) {
+            await utils.humanDelay(1500, 2500);
+          } else {
+            await new Promise((r) => setTimeout(r, 2000));
+          }
+
+          // 応答テキストを取得
+          let markdown = "";
+          if (utils.getResponseText) {
+            markdown = await utils.getResponseText(copySel, answerSel);
+          } else if (utils.copyResponseViaClipboard) {
+            try {
+              markdown = await utils.copyResponseViaClipboard(copySel);
+            } catch (e) {
+              const container = document.querySelector(answerSel);
+              markdown =
+                utils.htmlToMarkdown && container
+                  ? utils.htmlToMarkdown(container)
+                  : container?.innerText || "";
+            }
+          } else {
+            const container = document.querySelector(answerSel);
+            markdown =
+              utils.htmlToMarkdown && container
+                ? utils.htmlToMarkdown(container)
+                : container?.innerText || "";
+          }
+          sendResponse({ markdown });
+        } catch (e) {
+          sendResponse({ markdown: "", error: e.message || String(e) });
+        }
+      })();
+      return true;
+    }
   });
 })();

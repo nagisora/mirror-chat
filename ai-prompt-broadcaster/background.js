@@ -9,6 +9,7 @@ const CONTENT_SCRIPTS = {
 };
 const TASK_TIMEOUT_MS = 120000;
 const FAILED_ITEMS_KEY = "mirrorchatFailedItems";
+const CURRENT_TASK_KEY = "mirrorchatCurrentTask";
 
 const NOTIFICATION_ICON_URL = chrome.runtime.getURL("icon128.png");
 
@@ -134,6 +135,79 @@ function closeAITabs() {
   }
 }
 
+async function sendPromptToAI(aiKey, prompt, settings) {
+  const cfg = settings.aiConfigs?.[aiKey];
+  const tabId = openTabs[aiKey];
+
+  if (!tabId) {
+    notifyAIStatus(aiKey, "error");
+    return {
+      ai: aiKey,
+      name: cfg?.name || aiKey,
+      ok: false,
+      error: "タブが開いていません"
+    };
+  }
+
+  notifyAIStatus(aiKey, "sending");
+
+  return new Promise((resolve) => {
+    const timeoutId = setTimeout(() => {
+      notifyAIStatus(aiKey, "error");
+      resolve({
+        ai: aiKey,
+        name: cfg?.name || aiKey,
+        ok: false,
+        error: "タイムアウト"
+      });
+    }, TASK_TIMEOUT_MS);
+
+    chrome.scripting.executeScript(
+      { target: { tabId }, files: CONTENT_SCRIPTS[aiKey].files },
+      () => {
+        if (chrome.runtime.lastError) {
+          clearTimeout(timeoutId);
+          notifyAIStatus(aiKey, "error");
+          resolve({
+            ai: aiKey,
+            name: cfg?.name || aiKey,
+            ok: false,
+            error: chrome.runtime.lastError.message
+          });
+          return;
+        }
+
+        chrome.tabs.sendMessage(
+          tabId,
+          { type: "MIRRORCHAT_SEND_ONLY", prompt, config: cfg },
+          (response) => {
+            clearTimeout(timeoutId);
+            if (chrome.runtime.lastError) {
+              notifyAIStatus(aiKey, "error");
+              resolve({
+                ai: aiKey,
+                name: cfg?.name || aiKey,
+                ok: false,
+                error: chrome.runtime.lastError.message
+              });
+              return;
+            }
+            const data = response || {};
+            // 送信フェーズでは done/error の区別だけ行う
+            notifyAIStatus(aiKey, data.error ? "error" : "sending");
+            resolve({
+              ai: aiKey,
+              name: cfg?.name || aiKey,
+              ok: !data.error,
+              error: data.error
+            });
+          }
+        );
+      }
+    );
+  });
+}
+
 async function processOneTask(aiKey, prompt, settings) {
   const cfg = settings.aiConfigs?.[aiKey];
   const tabId = openTabs[aiKey];
@@ -142,24 +216,36 @@ async function processOneTask(aiKey, prompt, settings) {
     return { ai: aiKey, name: cfg?.name || aiKey, markdown: "", error: "タブが開いていません" };
   }
 
+  // 回答取得フェーズでは、クリップボードAPI等の制約のためタブにフォーカスを当てる
   notifyAIStatus(aiKey, "sending");
+  chrome.runtime.sendMessage?.({
+    type: "MIRRORCHAT_STATUS",
+    text: `${cfg?.name || aiKey} の回答を取得中です...`
+  });
 
   // 対象タブとウィンドウにフォーカスを当てる（クリップボードAPI等へのフォーカス対策）
   try {
-    await new Promise((r) => chrome.tabs.update(tabId, { active: true }, () => {
-      void chrome.runtime.lastError;
-      r();
-    }));
-    const tab = await new Promise((r) => chrome.tabs.get(tabId, (t) => {
-      void chrome.runtime.lastError;
-      r(t);
-    }));
+    // まずウィンドウを前面に出してからタブをアクティブ化する
+    const tab = await new Promise((r) =>
+      chrome.tabs.get(tabId, (t) => {
+        void chrome.runtime.lastError;
+        r(t);
+      })
+    );
     if (tab && tab.windowId) {
-      await new Promise((r) => chrome.windows.update(tab.windowId, { focused: true }, () => {
+      await new Promise((r) =>
+        chrome.windows.update(tab.windowId, { focused: true }, () => {
+          void chrome.runtime.lastError;
+          r();
+        })
+      );
+    }
+    await new Promise((r) =>
+      chrome.tabs.update(tabId, { active: true }, () => {
         void chrome.runtime.lastError;
         r();
-      }));
-    }
+      })
+    );
     // フォーカスが当たるまで少し待機
     await new Promise((r) => setTimeout(r, 500));
   } catch (e) {
@@ -194,7 +280,7 @@ async function processOneTask(aiKey, prompt, settings) {
 
         chrome.tabs.sendMessage(
           tabId,
-          { type: "MIRRORCHAT_START", prompt, config: cfg },
+          { type: "MIRRORCHAT_FETCH_ONLY", prompt, config: cfg },
           (response) => {
             clearTimeout(timeoutId);
             if (chrome.runtime.lastError) {
@@ -229,10 +315,11 @@ async function runTask(task) {
   if (task.retryPayload?.results) {
     results = task.retryPayload.results;
   } else {
+    // 回答取得フェーズでは、クリップボード利用の都合上タブを順番にフォーカスして処理する
     results = [];
     for (const aiKey of AI_KEYS) {
+      const cfg = settings.aiConfigs?.[aiKey];
       if (!openTabs[aiKey]) {
-        const cfg = settings.aiConfigs?.[aiKey];
         results.push({
           ai: aiKey,
           name: cfg?.name || aiKey,
@@ -242,6 +329,8 @@ async function runTask(task) {
         notifyAIStatus(aiKey, "error");
         continue;
       }
+      // 1サイトずつフォーカスしてクリップボードからテキストを取得する
+      // （並列化するとフォーカスとクリップボードが競合するため）
       const r = await processOneTask(aiKey, task.prompt, settings);
       results.push(r);
     }
@@ -302,6 +391,13 @@ async function runTask(task) {
         }
       );
     }
+  }
+
+  // 質問フローが完了したので現在のタスク情報をクリアする
+  try {
+    await new Promise((resolve) => chrome.storage.local.remove(CURRENT_TASK_KEY, resolve));
+  } catch (e) {
+    console.warn("MirrorChat: CURRENT_TASK_KEY の削除に失敗しました:", e);
   }
 
   chrome.runtime.sendMessage?.({ type: "MIRRORCHAT_DONE" });
@@ -405,9 +501,59 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === "MIRRORCHAT_SEND") {
-    queue.push({ prompt: msg.prompt });
-    if (!processing) processNext();
-    sendResponse({ ok: true });
+    // 送信フェーズ: 各AIタブにプロンプトを設定して送信のみ行う（回答の取得は後続の FETCH フェーズ）
+    (async () => {
+      try {
+        const prompt = msg.prompt;
+        // 現在の質問をローカルストレージに保持（ポップアップ再表示時などに利用）
+        await new Promise((resolve) =>
+          chrome.storage.local.set(
+            { [CURRENT_TASK_KEY]: { prompt, createdAt: Date.now() } },
+            resolve
+          )
+        );
+
+        const settings = await self.MirrorChatStorage.getSettings();
+        const sendPromises = AI_KEYS.map((aiKey) => {
+          if (!openTabs[aiKey]) {
+            const cfg = settings.aiConfigs?.[aiKey];
+            notifyAIStatus(aiKey, "error");
+            return Promise.resolve({
+              ai: aiKey,
+              name: cfg?.name || aiKey,
+              ok: false,
+              error: "タブが開いていません"
+            });
+          }
+          // 送信は並列で実行（フォーカス不要）
+          return sendPromptToAI(aiKey, prompt, settings);
+        });
+        await Promise.all(sendPromises);
+
+        chrome.runtime.sendMessage?.({
+          type: "MIRRORCHAT_STATUS",
+          text: "送信が完了しました。各AIの回答が出揃ったら「回答を取得」を押してください。"
+        });
+        sendResponse({ ok: true });
+      } catch (e) {
+        console.error("MirrorChat send error:", e);
+        sendResponse({ ok: false, error: e?.message || String(e) });
+      }
+    })();
+    return true;
+  } else if (msg.type === "MIRRORCHAT_FETCH") {
+    // 回答取得フェーズ: 現在の質問に対してタブを順番にフォーカスし、回答を収集してObsidianに保存
+    chrome.storage.local.get(CURRENT_TASK_KEY, (data) => {
+      const current = data?.[CURRENT_TASK_KEY];
+      if (!current || !current.prompt) {
+        sendResponse({ ok: false, error: "取得対象の質問が見つかりませんでした" });
+        return;
+      }
+      queue.push({ prompt: current.prompt });
+      if (!processing) processNext();
+      sendResponse({ ok: true });
+    });
+    return true;
   } else if (msg.type === "MIRRORCHAT_RETRY") {
     chrome.storage.local.get(FAILED_ITEMS_KEY, (x) => {
       const items = x[FAILED_ITEMS_KEY] || [];

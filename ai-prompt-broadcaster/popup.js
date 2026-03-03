@@ -19,6 +19,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const promptInput = document.getElementById("prompt-input");
   const sendButton = document.getElementById("send-button");
+  const collectButton = document.getElementById("collect-button");
   const openTabsButton = document.getElementById("open-tabs-button");
   const closeTabsButton = document.getElementById("close-tabs-button");
   const status = document.getElementById("status");
@@ -44,6 +45,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       setIndicator(key, openTabs && openTabs[key] ? "open" : "");
     });
     sendButton.disabled = !hasOpen;
+    // タブが開いていない間は回答取得も不可
+    collectButton.disabled = true;
     closeTabsButton.disabled = !hasOpen;
     openTabsButton.disabled = hasOpen;
   }
@@ -83,13 +86,47 @@ document.addEventListener("DOMContentLoaded", async () => {
       status.textContent = "質問を入力してください。";
       return;
     }
+    // 一度送信した質問が処理中の間は、新しい送信は行わない
     sendButton.disabled = true;
-    status.textContent = "送信中...各AIに質問を送っています。";
+    collectButton.disabled = false;
+    status.textContent = "送信中...各AIに質問を送っています。回答生成完了後に「回答を取得」を押してください。";
 
     AI_KEYS.forEach((key) => setIndicator(key, "sending"));
 
-    chrome.runtime.sendMessage({ type: "MIRRORCHAT_SEND", prompt: text });
-    status.textContent = "送信を開始しました。バックグラウンドで順次処理されます。";
+    chrome.runtime.sendMessage({ type: "MIRRORCHAT_SEND", prompt: text }, (resp) => {
+      if (chrome.runtime.lastError) {
+        status.textContent = "送信に失敗しました: " + chrome.runtime.lastError.message;
+        sendButton.disabled = false;
+        collectButton.disabled = true;
+        return;
+      }
+      if (!resp || !resp.ok) {
+        status.textContent = "送信に失敗しました: " + (resp?.error || "不明なエラー");
+        sendButton.disabled = false;
+        collectButton.disabled = true;
+        return;
+      }
+      status.textContent = "送信が完了しました。各AIの回答が出揃ったら「回答を取得」を押してください。";
+    });
+  });
+
+  collectButton.addEventListener("click", () => {
+    collectButton.disabled = true;
+    status.textContent = "回答を取得中です。タブを順番にフォーカスしてテキストを収集します...";
+    chrome.runtime.sendMessage({ type: "MIRRORCHAT_FETCH" }, (resp) => {
+      if (chrome.runtime.lastError) {
+        status.textContent = "回答取得の開始に失敗しました: " + chrome.runtime.lastError.message;
+        collectButton.disabled = false;
+        return;
+      }
+      if (!resp || !resp.ok) {
+        status.textContent = "回答取得の開始に失敗しました: " + (resp?.error || "不明なエラー");
+        collectButton.disabled = false;
+        return;
+      }
+      // 実際の取得完了は MIRRORCHAT_DONE で通知される
+      status.textContent = "回答取得を開始しました。バックグラウンドで順次処理されます。";
+    });
   });
 
   retryButton.addEventListener("click", async () => {
@@ -113,7 +150,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     if (msg.type === "MIRRORCHAT_DONE") {
       updateRetryVisibility();
+      // 1回の質問フローが完了したので、新しい質問を送信可能にする
       sendButton.disabled = false;
+      collectButton.disabled = true;
       refreshTabStatus();
     }
   });
@@ -127,4 +166,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   updateRetryVisibility();
   refreshTabStatus();
+
+  // 直前の質問が未取得のまま残っている場合は、回答取得ボタンを有効化する
+  chrome.storage.local.get("mirrorchatCurrentTask", (data) => {
+    const current = data?.mirrorchatCurrentTask;
+    if (current?.prompt) {
+      // 入力欄に復元しておく（必要に応じて編集もできる）
+      promptInput.value = current.prompt;
+      sendButton.disabled = true;
+      collectButton.disabled = false;
+      status.textContent = "前回の質問の回答が未取得です。「回答を取得」を押してObsidianに保存してください。";
+    }
+  });
 });
