@@ -528,6 +528,9 @@ async function getResponseText(copyButtonSelector, answerContainerSelector) {
  * 応答完了待ちとテキスト取得をまとめて行うヘルパー。
  * 各 content script 側ではサービス固有のセレクタだけを指定すればよい。
  *
+ * 前提: content-utils.js は content-base.js より先に読み込まれる（constants.js の CONTENT_SCRIPTS で定義）。
+ * waitForResponseComplete / getResponseText は同一ファイル内で定義済みのため、typeof チェックは念のための防御。
+ *
  * @param {string} copyButtonSelector - コピーボタンのセレクタ
  * @param {string} answerContainerSelector - 回答コンテナのセレクタ
  * @param {string} doneCheckSelector - 応答中に表示される要素のセレクタ（例: 停止ボタン）

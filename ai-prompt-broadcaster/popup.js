@@ -26,6 +26,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const retrySection = document.getElementById("retry-section");
   const retryButton = document.getElementById("retry-button");
 
+  // constants.js が先に読み込まれる前提。フォールバックは念のため。
   const AI_KEYS = window.MirrorChatConstants?.AI_KEYS ?? ["chatgpt", "claude", "gemini", "grok"];
   const indicators = {};
   AI_KEYS.forEach((key) => {

@@ -177,7 +177,7 @@ test.describe("MirrorChat 拡張機能", () => {
     await expect(page.locator("#send-button")).toBeEnabled({ timeout: 15_000 });
 
     // 入力欄を明示的に空にしてから送信（前のテストの残留を防ぐ）
-    await page.locator("#prompt-input").clear();
+    await page.locator("#prompt-input").fill("");
     await page.locator("#send-button").click();
 
     await expect(page.locator("#status")).toContainText("入力してください", {

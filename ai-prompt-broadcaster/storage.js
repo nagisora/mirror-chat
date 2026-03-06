@@ -1,5 +1,7 @@
 (function () {
-  const STORAGE_KEY = "mirrorchatSettings";
+  const STORAGE_KEY =
+    (typeof self !== "undefined" ? self : window).MirrorChatConstants?.STORAGE_KEYS?.SETTINGS ??
+    "mirrorchatSettings";
 
   const defaultSettings = {
     obsidian: {

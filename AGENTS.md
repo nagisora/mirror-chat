@@ -64,4 +64,5 @@ mkdir -p /home/ubuntu/ObsidianVault
 - コンテナ環境では dbus 関連のエラーが出るが、拡張機能の動作には影響しない。
 - 各AIサービスのDOMセレクタはUI変更で壊れる可能性がある。Options ページで調整可能。
 - Obsidian Local REST API の API キーは拡張機能の Options ページで設定する。
+- Obsidian ノートのパスは `basePath`（先頭に `/` を含めない）で指定する。`obsidianClient.createNote` は先頭の `/` を自動除去する。
 - AIサービスにログインしていない場合、回答は「(取得できませんでした)」となるが、Obsidian への保存フロー自体は正常に動作する。

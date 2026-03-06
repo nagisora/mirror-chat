@@ -26,9 +26,13 @@ const queue = [];
 let processing = false;
 
 function getObsidianFolderName(question) {
-  const safe = String(question).replace(/[/\\?*:"<>|]/g, "").slice(0, 20);
+  const cleaned = String(question)
+    .replace(/[\r\n]/g, " ")
+    .replace(/[/\\?*:"<>|]/g, "");
+  const safe = cleaned.slice(0, 20);
   const date = new Date().toISOString().slice(0, 10);
-  return `${date}_${safe}`;
+  const hash = Date.now().toString(36).slice(-6);
+  return `${date}_${safe}_${hash}`;
 }
 
 function buildSummary(results) {
@@ -579,8 +583,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       chrome.storage.local.set({ [FAILED_ITEMS_KEY]: [] });
       items.forEach((it) => queue.push({ prompt: it.question, retryPayload: it }));
       if (!processing && queue.length > 0) processNext();
+      sendResponse({ ok: true });
     });
-    sendResponse({ ok: true });
+    return true;
   }
   return true;
 });
