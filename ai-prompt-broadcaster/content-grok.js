@@ -6,6 +6,8 @@
     doneCheckSelector: "button[aria-label='Stop'], button[aria-label='Cancel']",
     submitMethod: "pressEnterToSubmit"
   };
+  if (window._mirrorChatListenerAdded) return;
+  window._mirrorChatListenerAdded = true;
   chrome.runtime.onMessage.addListener(
     window.MirrorChatContentHandler.createMirrorChatHandler(defaultConfig)
   );
