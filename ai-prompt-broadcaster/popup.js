@@ -39,22 +39,31 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (state) el.classList.add(state);
   }
 
-  function updateTabUI(openTabs) {
+  function updateTabUI(openTabs, hasPendingQuestion = false) {
     const hasOpen = openTabs && Object.keys(openTabs).length > 0;
     AI_KEYS.forEach((key) => {
       setIndicator(key, openTabs && openTabs[key] ? "open" : "");
     });
-    sendButton.disabled = !hasOpen;
-    // タブが開いていない間は回答取得も不可
-    collectButton.disabled = true;
     closeTabsButton.disabled = !hasOpen;
     openTabsButton.disabled = hasOpen;
+    if (hasPendingQuestion) {
+      sendButton.disabled = true;
+      collectButton.disabled = !hasOpen;
+    } else {
+      sendButton.disabled = !hasOpen;
+      collectButton.disabled = true;
+    }
   }
 
   function refreshTabStatus() {
+    const currentTaskKey = window.MirrorChatConstants?.STORAGE_KEYS?.CURRENT_TASK ?? "mirrorchatCurrentTask";
     chrome.runtime.sendMessage({ type: "MIRRORCHAT_GET_TAB_STATUS" }, (resp) => {
       if (chrome.runtime.lastError) return;
-      updateTabUI(resp?.openTabs);
+      chrome.storage.local.get(currentTaskKey, (data) => {
+        const current = data?.[currentTaskKey];
+        const hasPendingQuestion = !!(current?.prompt);
+        updateTabUI(resp?.openTabs, hasPendingQuestion);
+      });
     });
   }
 
@@ -168,15 +177,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   updateRetryVisibility();
   refreshTabStatus();
 
-  // 直前の質問が未取得のまま残っている場合は、回答取得ボタンを有効化する
+  // 直前の質問が未取得のまま残っている場合は、入力欄とステータスを復元する（ボタン状態は refreshTabStatus で設定）
   const currentTaskKey = window.MirrorChatConstants?.STORAGE_KEYS?.CURRENT_TASK ?? "mirrorchatCurrentTask";
   chrome.storage.local.get(currentTaskKey, (data) => {
     const current = data?.[currentTaskKey];
     if (current?.prompt) {
-      // 入力欄に復元しておく（必要に応じて編集もできる）
       promptInput.value = current.prompt;
-      sendButton.disabled = true;
-      collectButton.disabled = false;
       status.textContent = "前回の質問の回答が未取得です。「回答を取得」を押してObsidianに保存してください。";
     }
   });

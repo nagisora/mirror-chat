@@ -42,11 +42,12 @@ mkdir -p /home/ubuntu/ObsidianVault
 /tmp/squashfs-root/obsidian --no-sandbox --disable-gpu &
 ```
 
-起動後、GUI で Vault を `/home/ubuntu/ObsidianVault` に設定し、Community Plugins から「Local REST API」をインストール・有効化する。Settings で HTTPS サーバーを有効にする（デフォルトポート 27124）。
+起動後、GUI で Vault を `/home/ubuntu/ObsidianVault` に設定し、Community Plugins から「Local REST API」をインストール・有効化する。HTTP のデフォルトポートは 27123、HTTPS は 27124。拡張機能の Options で `http://127.0.0.1:27123/` を指定する。
 
 ### テスト・リント
 
-- 自動テストやリント設定は現在存在しない。手動テストのみ。
+- E2E テスト: `e2e/` ディレクトリで Playwright による自動テストを実行可能。`cd e2e && pnpm test`
+- ログイン済み Chrome プロファイルを使うと送信〜回答取得までフルにテスト可能。未ログインの場合は基本動作のみ検証。
 - 手動テストには Chrome ブラウザと、各AIサービスへのログイン、Obsidian + Local REST API プラグインが必要。
 - 詳細な利用手順は `docs/CHROME_EXTENSION_USAGE.md` を参照。
 

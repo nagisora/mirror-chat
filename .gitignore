@@ -2,6 +2,9 @@
 node_modules/
 .pnpm-store/
 
+# Cursor
+.cursor/plans/
+
 # E2E
 e2e/node_modules/
 e2e/.playwright-user-data/
