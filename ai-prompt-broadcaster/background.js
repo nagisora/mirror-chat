@@ -387,15 +387,25 @@ async function runTask(task) {
     }
   }
 
-  const saveResult = await saveToObsidian(task.prompt, results, settings);
+  const hasAnyMarkdown = results.some((r) => r.markdown && r.markdown.trim().length > 0);
   const failed = results.filter((r) => r.error).map((r) => r.name);
+  let saveResult = { ok: false };
+
+  if (hasAnyMarkdown) {
+    saveResult = await saveToObsidian(task.prompt, results, settings);
+  }
+
   if (!saveResult.ok) {
-    await appendFailedItemToLocal({
-      question: task.prompt,
-      results,
-      error: saveResult.error
-    });
-    showNotification("MirrorChat: 一部失敗", `Obsidian保存失敗。失敗: ${failed.join(", ")}。再送可能です。`);
+    if (hasAnyMarkdown) {
+      await appendFailedItemToLocal({
+        question: task.prompt,
+        results,
+        error: saveResult.error
+      });
+      showNotification("MirrorChat: 一部失敗", `Obsidian保存失敗。失敗: ${failed.join(", ")}。再送可能です。`);
+    } else {
+      showNotification("MirrorChat: 取得失敗", `全てのAIから回答を取得できませんでした。Obsidianには保存しませんでした。`);
+    }
   } else {
     if (failed.length > 0) {
       showNotification("MirrorChat: 一部失敗", `取得失敗: ${failed.join(", ")}。Obsidianには保存済みです。`);
