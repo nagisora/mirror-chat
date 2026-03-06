@@ -4,6 +4,7 @@ node_modules/
 
 # Cursor
 .cursor/plans/
+.cursor/*.log
 
 # E2E
 e2e/node_modules/
