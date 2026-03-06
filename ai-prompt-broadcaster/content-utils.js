@@ -128,23 +128,6 @@ function humanDelay(minMs = 1500, maxMs = 3000) {
 }
 
 /**
- * キーボードイベントシーケンスを発火（focus → click → key events）
- * prompt-queue-extension の simulateInput を参考にした人間らしい入力
- */
-function dispatchKeySequence(element, key) {
-  const opts = { key, bubbles: true, cancelable: true };
-  element.dispatchEvent(new KeyboardEvent("keydown", opts));
-  element.dispatchEvent(new KeyboardEvent("keypress", opts));
-  element.dispatchEvent(new InputEvent("beforeinput", {
-    bubbles: true, cancelable: true, inputType: "insertText", data: key
-  }));
-  element.dispatchEvent(new InputEvent("input", {
-    bubbles: true, inputType: "insertText", data: key
-  }));
-  element.dispatchEvent(new KeyboardEvent("keyup", opts));
-}
-
-/**
  * React / ProseMirror / フレームワーク対応のテキスト入力シミュレーション
  *
  * ChatGPT の ProseMirror で実際に動作確認済みの手法:

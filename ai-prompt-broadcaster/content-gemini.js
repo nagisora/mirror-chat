@@ -9,6 +9,8 @@
     doneCheckSelector: "button[aria-label='Stop'], mat-icon[data-mat-icon-name='stop_circle']",
     submitMethod: "clickSubmitOrEnter"
   };
+  if (window._mirrorChatListenerAdded) return;
+  window._mirrorChatListenerAdded = true;
   chrome.runtime.onMessage.addListener(
     window.MirrorChatContentHandler.createMirrorChatHandler(defaultConfig)
   );

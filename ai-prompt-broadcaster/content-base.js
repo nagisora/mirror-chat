@@ -61,7 +61,7 @@
                 }
 
                 if (!input.textContent.includes(msg.prompt)) {
-                  input.innerHTML = "<p>" + msg.prompt + "</p>";
+                  input.textContent = msg.prompt;
                   input.dispatchEvent(
                     new InputEvent("input", {
                       bubbles: true,
