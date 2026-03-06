@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: セキュリティ脆弱性の報告
+    url: https://github.com/nagisora/mirror-chat/security/advisories/new
+    about: セキュリティ上の問題は非公開で報告してください
