@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: e2e/pnpm-lock.yaml
+
+      - name: Install Playwright browsers
+        run: cd e2e && pnpm exec playwright install chromium
+
+      - name: Run E2E tests
+        run: cd e2e && pnpm test
+        env:
+          CI: true
