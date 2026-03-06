@@ -8,8 +8,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     const isStandalone = params.get("standalone") === "1";
     if (!isStandalone && chrome?.tabs?.create && chrome?.runtime?.getURL) {
       const url = chrome.runtime.getURL("popup.html?standalone=1");
-      chrome.tabs.create({ url });
-      window.close();
+      chrome.tabs.create({ url }, () => {
+        window.close();
+      });
       return;
     }
   } catch (e) {

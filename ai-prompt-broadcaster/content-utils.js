@@ -122,7 +122,7 @@ async function waitForResponseComplete(answerContainerSelector, doneCheckSelecto
 /**
  * 人間らしいランダム遅延（bot判定回避）
  */
-function humanDelay(minMs = 1500, maxMs = 3000) {
+function humanDelay(minMs = 2000, maxMs = 3500) {
   const ms = minMs + Math.random() * (maxMs - minMs);
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -303,11 +303,13 @@ async function copyResponseViaClipboard(copyButtonSelector) {
 
   return new Promise((resolve, reject) => {
     let timeoutId;
+    const attemptTimeoutIds = [];
     let originalWriteText = null;
     let resolved = false;
 
     const cleanup = () => {
       clearTimeout(timeoutId);
+      attemptTimeoutIds.forEach((id) => clearTimeout(id));
       if (originalWriteText && navigator.clipboard) {
         try {
           Object.defineProperty(navigator.clipboard, "writeText", {
@@ -390,7 +392,7 @@ async function copyResponseViaClipboard(copyButtonSelector) {
     };
 
     CLIPBOARD_READ_ATTEMPTS_MS.forEach((ms) => {
-      setTimeout(() => tryOffscreenRead(), ms);
+      attemptTimeoutIds.push(setTimeout(() => tryOffscreenRead(), ms));
     });
 
     timeoutId = setTimeout(async () => {
@@ -529,7 +531,6 @@ async function getResponseText(copyButtonSelector, answerContainerSelector) {
  * 各 content script 側ではサービス固有のセレクタだけを指定すればよい。
  *
  * 前提: content-utils.js は content-base.js より先に読み込まれる（constants.js の CONTENT_SCRIPTS で定義）。
- * waitForResponseComplete / getResponseText は同一ファイル内で定義済みのため、typeof チェックは念のための防御。
  *
  * @param {string} copyButtonSelector - コピーボタンのセレクタ
  * @param {string} answerContainerSelector - 回答コンテナのセレクタ
@@ -545,47 +546,13 @@ async function fetchResponseTextWithWait(
   maxWaitMs = 15000,
   stableMs = 1500
 ) {
-  // 回答は基本的に出揃っている前提だが、安全のため短めの完了待ちを入れる
-  if (typeof waitForResponseComplete === "function") {
-    await waitForResponseComplete(
-      answerContainerSelector,
-      doneCheckSelector,
-      maxWaitMs,
-      stableMs
-    );
-  } else if (typeof waitForStable === "function") {
-    await waitForStable(answerContainerSelector, stableMs);
-  } else {
-    await new Promise((r) => setTimeout(r, stableMs));
-  }
-
-  // 応答テキストを取得（コピーボタン → DOM フォールバック）
-  let markdown = "";
-  if (typeof getResponseText === "function") {
-    markdown = await getResponseText(copyButtonSelector, answerContainerSelector);
-  } else if (typeof copyResponseViaClipboard === "function") {
-    try {
-      markdown = await copyResponseViaClipboard(copyButtonSelector);
-    } catch (e) {
-      const container = answerContainerSelector
-        ? document.querySelector(answerContainerSelector)
-        : null;
-      markdown =
-        typeof htmlToMarkdown === "function" && container
-          ? htmlToMarkdown(container)
-          : container?.innerText || "";
-    }
-  } else {
-    const container = answerContainerSelector
-      ? document.querySelector(answerContainerSelector)
-      : null;
-    markdown =
-      typeof htmlToMarkdown === "function" && container
-        ? htmlToMarkdown(container)
-        : container?.innerText || "";
-  }
-
-  return markdown;
+  await waitForResponseComplete(
+    answerContainerSelector,
+    doneCheckSelector,
+    maxWaitMs,
+    stableMs
+  );
+  return getResponseText(copyButtonSelector, answerContainerSelector);
 }
 
 window.MirrorChatUtils = {

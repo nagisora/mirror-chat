@@ -8,8 +8,8 @@
     doneCheckSelector: "[data-testid='stop-button'], button[aria-label='Stop']",
     submitMethod: "clickSubmitOrEnter"
   };
-  if (window._mirrorChatListenerAdded) return;
-  window._mirrorChatListenerAdded = true;
+  if (window._mirrorChatListener_claude) return;
+  window._mirrorChatListener_claude = true;
   chrome.runtime.onMessage.addListener(
     window.MirrorChatContentHandler.createMirrorChatHandler(defaultConfig)
   );

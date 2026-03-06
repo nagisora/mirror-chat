@@ -61,6 +61,7 @@
                 }
 
                 if (!input.textContent.includes(msg.prompt)) {
+                  // textContent は HTML をエスケープするため XSS 安全。innerHTML は使用しないこと。
                   input.textContent = msg.prompt;
                   input.dispatchEvent(
                     new InputEvent("input", {

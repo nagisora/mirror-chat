@@ -8,8 +8,8 @@
     submitMethod: "clickSubmitOrEnter",
     inputSuccessFallback: "chatgpt"
   };
-  if (window._mirrorChatListenerAdded) return;
-  window._mirrorChatListenerAdded = true;
+  if (window._mirrorChatListener_chatgpt) return;
+  window._mirrorChatListener_chatgpt = true;
   chrome.runtime.onMessage.addListener(
     window.MirrorChatContentHandler.createMirrorChatHandler(defaultConfig)
   );

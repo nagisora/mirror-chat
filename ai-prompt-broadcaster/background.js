@@ -28,8 +28,10 @@ let processing = false;
 function getObsidianFolderName(question) {
   const cleaned = String(question)
     .replace(/[\r\n]/g, " ")
-    .replace(/[/\\?*:"<>|]/g, "");
-  const safe = cleaned.slice(0, 20);
+    .replace(/[/\\?*:"<>|.]/g, "");
+  const safe = Array.from(cleaned.trim())
+    .slice(0, 20)
+    .join("") || "q";
   const date = new Date().toISOString().slice(0, 10);
   const hash = Date.now().toString(36).slice(-6);
   return `${date}_${safe}_${hash}`;
@@ -587,5 +589,5 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     return true;
   }
-  return true;
+  return false;
 });
