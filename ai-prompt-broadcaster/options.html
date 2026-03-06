@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>MirrorChat 設定</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="options">
+      <h1>MirrorChat 設定</h1>
+
+      <section>
+        <h2>Obsidian 連携</h2>
+        <label>
+          Obsidian Local REST API ベースURL
+          <input id="obsidian-base-url" type="text" placeholder="http://127.0.0.1:27123/" />
+        </label>
+        <label>
+          API トークン
+          <input id="obsidian-token" type="password" />
+        </label>
+        <label>
+          保存ルートパス（Vault 内）
+          <input id="obsidian-root-path" type="text" placeholder="200-AI Research" />
+        </label>
+      </section>
+
+      <section>
+        <h2>各AIサイトのDOMセレクタ</h2>
+
+        <div class="ai-config" data-ai="chatgpt">
+          <h3>ChatGPT</h3>
+          <label>
+            入力欄セレクタ
+            <input class="input-selector" type="text" />
+          </label>
+          <label>
+            送信ボタンセレクタ
+            <input class="submit-selector" type="text" />
+          </label>
+          <label>
+            回答コンテナセレクタ
+            <input class="answer-selector" type="text" />
+          </label>
+          <label>
+            コピーボタンセレクタ（応答取得用）
+            <input class="copy-selector" type="text" placeholder="例: [data-testid='action-bar-copy']" />
+          </label>
+        </div>
+
+        <div class="ai-config" data-ai="claude">
+          <h3>Claude</h3>
+          <label>
+            入力欄セレクタ
+            <input class="input-selector" type="text" />
+          </label>
+          <label>
+            送信ボタンセレクタ
+            <input class="submit-selector" type="text" />
+          </label>
+          <label>
+            回答コンテナセレクタ
+            <input class="answer-selector" type="text" />
+          </label>
+          <label>
+            コピーボタンセレクタ（応答取得用）
+            <input class="copy-selector" type="text" placeholder="例: [data-testid='action-bar-copy']" />
+          </label>
+        </div>
+
+        <div class="ai-config" data-ai="gemini">
+          <h3>Gemini</h3>
+          <label>
+            入力欄セレクタ
+            <input class="input-selector" type="text" />
+          </label>
+          <label>
+            送信ボタンセレクタ
+            <input class="submit-selector" type="text" />
+          </label>
+          <label>
+            回答コンテナセレクタ
+            <input class="answer-selector" type="text" />
+          </label>
+          <label>
+            コピーボタンセレクタ（応答取得用）
+            <input class="copy-selector" type="text" placeholder="例: [data-testid='action-bar-copy']" />
+          </label>
+        </div>
+
+        <div class="ai-config" data-ai="grok">
+          <h3>Grok</h3>
+          <label>
+            入力欄セレクタ
+            <input class="input-selector" type="text" />
+          </label>
+          <label>
+            送信ボタンセレクタ
+            <input class="submit-selector" type="text" />
+          </label>
+          <label>
+            回答コンテナセレクタ
+            <input class="answer-selector" type="text" />
+          </label>
+          <label>
+            コピーボタンセレクタ（応答取得用）
+            <input class="copy-selector" type="text" placeholder="例: [data-testid='action-bar-copy']" />
+          </label>
+        </div>
+      </section>
+
+      <div class="actions">
+        <button id="save-button">保存</button>
+        <span id="status" aria-live="polite"></span>
+      </div>
+
+      <section class="retry-section">
+        <h2>保存に失敗したデータの再送</h2>
+        <p>Obsidian 保存に失敗したデータがある場合、ここから再送信できます。</p>
+        <button id="retry-button">再送信</button>
+      </section>
+    </main>
+
+    <script src="constants.js"></script>
+    <script src="storage.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>
+

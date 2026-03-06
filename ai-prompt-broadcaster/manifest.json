@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "MirrorChat: AI一括質問＆Obsidian保存ツール",
+  "description": "1つのプロンプトを複数AI（ChatGPT, Claude, Gemini, Grok）に順次送信し、ObsidianにMarkdownとして保存します。",
+  "version": "0.1.0",
+  "icons": {
+    "128": "icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon128.png",
+    "default_title": "MirrorChat"
+  },
+  "options_page": "options.html",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "notifications",
+    "clipboardRead",
+    "clipboardWrite",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "*://chatgpt.com/*",
+    "*://claude.ai/*",
+    "*://gemini.google.com/*",
+    "*://grok.com/*",
+    "http://127.0.0.1/*",
+    "https://127.0.0.1/*",
+    "http://localhost/*",
+    "https://localhost/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}
+

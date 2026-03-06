@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>MirrorChat</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <h1>MirrorChat</h1>
+      <p class="desc">AIサイトを先に開いてから、質問を送信します。</p>
+
+      <section class="tab-status" id="tab-status">
+        <div class="tab-item" data-ai="chatgpt">
+          <span class="indicator" id="ind-chatgpt"></span>
+          <span class="tab-name">ChatGPT</span>
+        </div>
+        <div class="tab-item" data-ai="claude">
+          <span class="indicator" id="ind-claude"></span>
+          <span class="tab-name">Claude</span>
+        </div>
+        <div class="tab-item" data-ai="gemini">
+          <span class="indicator" id="ind-gemini"></span>
+          <span class="tab-name">Gemini</span>
+        </div>
+        <div class="tab-item" data-ai="grok">
+          <span class="indicator" id="ind-grok"></span>
+          <span class="tab-name">Grok</span>
+        </div>
+      </section>
+
+      <div class="actions">
+        <button id="open-tabs-button">サイトを開く</button>
+        <button id="close-tabs-button" disabled>サイトを閉じる</button>
+      </div>
+
+      <label>
+        質問
+        <textarea id="prompt-input" rows="4" placeholder="ここに質問を入力..."></textarea>
+      </label>
+      <div class="actions">
+        <button id="send-button" disabled>送信</button>
+        <button id="collect-button" disabled>回答を取得</button>
+        <a href="options.html" target="_blank" class="link">設定</a>
+      </div>
+      <p id="status" class="status" aria-live="polite"></p>
+      <section id="retry-section" class="retry-section" hidden>
+        <h2>保存に失敗したデータ</h2>
+        <button id="retry-button">再送信</button>
+      </section>
+    </main>
+    <script src="constants.js"></script>
+    <script src="storage.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
