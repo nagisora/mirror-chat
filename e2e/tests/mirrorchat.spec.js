@@ -215,6 +215,18 @@ test.describe("MirrorChat 拡張機能", () => {
   });
 
   test("ポップアップ再表示時にタブ状態が復帰する", async ({ context, page, extensionId }) => {
+    // 前のテストの残留状態をクリア（CURRENT_TASK があると hasPendingQuestion で送信ボタンが無効になる）
+    await page.goto(`chrome-extension://${extensionId}/popup.html?standalone=1`);
+    await page.evaluate(() => {
+      return new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: "MIRRORCHAT_CLOSE_TABS" }, () => {
+          chrome.storage.local.remove(
+            ["mirrorchatCurrentTask", "mirrorchatFailedItems"],
+            resolve
+          );
+        });
+      });
+    });
     // タブを開く
     await page.goto(`chrome-extension://${extensionId}/popup.html?standalone=1`);
     await page.locator("#open-tabs-button").click();
