@@ -7,8 +7,16 @@ on:
     branches: [main, develop]
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate manifest.json
+        run: node -e "JSON.parse(require('fs').readFileSync('ai-prompt-broadcaster/manifest.json', 'utf8')); console.log('manifest.json: OK')"
+
   e2e:
     runs-on: ubuntu-latest
+    needs: validate
     steps:
       - uses: actions/checkout@v4
 
@@ -25,7 +33,8 @@ jobs:
       - name: Install Playwright browsers
         run: cd e2e && pnpm exec playwright install chromium
 
+      # Chrome拡張は headed モード必須。xvfb で仮想ディスプレイを提供
       - name: Run E2E tests
-        run: cd e2e && pnpm test
+        run: xvfb-run --auto-servernum --server-args='-screen 0 1280x720x24' bash -c 'cd e2e && pnpm test'
         env:
           CI: true
