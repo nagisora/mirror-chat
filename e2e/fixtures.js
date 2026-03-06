@@ -18,8 +18,9 @@ const userDataDir =
 
 const test = base.extend({
   context: async ({}, use) => {
+    // Chrome拡張は headed モード必須。CI では xvfb で仮想ディスプレイを使用
     const context = await chromium.launchPersistentContext(userDataDir, {
-      headless: !!process.env.CI,
+      headless: false,
       args: [
         `--disable-extensions-except=${pathToExtension}`,
         `--load-extension=${pathToExtension}`,
