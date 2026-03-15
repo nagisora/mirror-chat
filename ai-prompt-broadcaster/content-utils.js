@@ -111,7 +111,7 @@ async function waitForResponseComplete(answerContainerSelector, doneCheckSelecto
     while (Date.now() - start < maxWaitMs) {
       const indicator = document.querySelector(doneCheckSelector);
       if (!indicator) break; // 停止ボタン等が消えた = 応答完了
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 300)); // 300ms間隔でポーリング（応答完了の検出を高速化）
     }
   }
 
