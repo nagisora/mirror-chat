@@ -86,8 +86,9 @@ async function getObsidianFolderName(question) {
   return `${date}-${seqStr}-${safe}`;
 }
 
-function buildSummary(results) {
-  const parts = [];
+/** 質問と全AI回答を1つのMarkdownにまとめる */
+function buildSingleNote(question, results) {
+  const parts = [`# 質問\n\n${question}\n\n---\n\n`];
   for (const { name, markdown } of results) {
     parts.push(`## ${name}\n\n${markdown || "(取得できませんでした)"}\n\n`);
   }
@@ -104,17 +105,11 @@ async function saveToObsidian(question, results, settings) {
     return { ok: false, error: "ObsidianのベースURLが設定されていません" };
   }
 
-  const files = [
-    { path: `${basePath}/question.md`, content: question },
-    ...results.map((r) => ({ path: `${basePath}/${r.name}.md`, content: r.markdown || "" })),
-    { path: `${basePath}/Summary.md`, content: buildSummary(results) }
-  ];
-
-  for (const f of files) {
-    const res = await self.ObsidianClient.createNote(baseUrl, token, f.path, f.content);
-    if (!res.ok) {
-      return { ok: false, error: res.error, payload: { question, results, basePath } };
-    }
+  const path = `${basePath}/note.md`;
+  const content = buildSingleNote(question, results);
+  const res = await self.ObsidianClient.createNote(baseUrl, token, path, content);
+  if (!res.ok) {
+    return { ok: false, error: res.error, payload: { question, results, basePath } };
   }
   return { ok: true };
 }
