@@ -26,7 +26,7 @@
         submitButtonSelector: "button[class*='Button_claude'], div.shrink-0 button[aria-label]",
         answerContainerSelector: "[data-testid='conversation-thread'], main",
         copyButtonSelector: "[data-testid='action-bar-copy'], button[aria-label='Copy'], [aria-label*='Copy'], [aria-label*='コピー']",
-        doneCheckSelector: ""
+        doneCheckSelector: "[data-testid='stop-button'], button[aria-label='Stop']"
       },
       gemini: {
         name: "Gemini",
