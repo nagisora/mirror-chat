@@ -34,7 +34,7 @@
 
 ```
 200-AI Research/
-└── YYYY-MM-DD_質問の先頭20文字/
+└── YYYYMMDD-01-質問の先頭20文字/
     ├── question.md    # 元の質問
     ├── ChatGPT.md
     ├── Claude.md
