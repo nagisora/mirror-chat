@@ -114,6 +114,16 @@ button:disabled {
   background: #15803d;
 }
 
+#resave-button {
+  background: #ea580c;
+  color: #fff;
+  border-color: #ea580c;
+}
+
+#resave-button:hover:not(:disabled) {
+  background: #c2410c;
+}
+
 .link {
   font-size: 12px;
   color: #0066cc;

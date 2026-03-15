@@ -5,6 +5,7 @@ const TASK_TIMEOUT_MS = TIMEOUT_MS.TASK;
 const FAILED_ITEMS_KEY = STORAGE_KEYS.FAILED_ITEMS;
 const CURRENT_TASK_KEY = STORAGE_KEYS.CURRENT_TASK;
 const AI_TAB_IDS_KEY = STORAGE_KEYS.AI_TAB_IDS;
+const FOLDER_SEQ_KEY = STORAGE_KEYS.FOLDER_SEQ;
 const FOCUS_DELAY_MS = TIMEOUT_MS.FOCUS_DELAY;
 
 const NOTIFICATION_ICON_URL = chrome.runtime.getURL("icon128.png");
@@ -54,16 +55,35 @@ async function saveAiTabIds() {
   );
 }
 
-function getObsidianFolderName(question) {
+/** 当日のフォルダ項番を取得・インクリメント（日付が変わったら1からリセット） */
+async function getNextFolderSeq() {
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const stored = await new Promise((resolve) =>
+    chrome.storage.local.get(FOLDER_SEQ_KEY, (x) => resolve(x[FOLDER_SEQ_KEY] || {}))
+  );
+  if (stored.lastDate !== today) {
+    stored.lastDate = today;
+    stored.seq = 0;
+  }
+  stored.seq = (stored.seq || 0) + 1;
+  await new Promise((resolve) =>
+    chrome.storage.local.set({ [FOLDER_SEQ_KEY]: stored }, resolve)
+  );
+  return stored.seq;
+}
+
+/** フォルダ名を生成: 20260315-01-質問の先頭20文字（日付ハイフンなし、項番付き、質問順に並ぶ） */
+async function getObsidianFolderName(question) {
   const cleaned = String(question)
     .replace(/[\r\n]/g, " ")
     .replace(/[/\\?*:"<>|.]/g, "");
   const safe = Array.from(cleaned.trim())
     .slice(0, 20)
     .join("") || "q";
-  const date = new Date().toISOString().slice(0, 10);
-  const hash = Date.now().toString(36).slice(-6);
-  return `${date}_${safe}_${hash}`;
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const seq = await getNextFolderSeq();
+  const seqStr = String(seq).padStart(2, "0");
+  return `${date}-${seqStr}-${safe}`;
 }
 
 function buildSummary(results) {
@@ -76,7 +96,7 @@ function buildSummary(results) {
 
 async function saveToObsidian(question, results, settings) {
   const root = (settings.obsidian?.rootPath || "AI-Research").replace(/\/$/, "");
-  const folder = getObsidianFolderName(question);
+  const folder = await getObsidianFolderName(question);
   const basePath = `${root}/${folder}`;
   const { baseUrl, token } = settings.obsidian || {};
 

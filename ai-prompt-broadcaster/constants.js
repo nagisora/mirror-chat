@@ -9,7 +9,8 @@
     FAILED_ITEMS: "mirrorchatFailedItems",
     CURRENT_TASK: "mirrorchatCurrentTask",
     SETTINGS: "mirrorchatSettings",
-    AI_TAB_IDS: "mirrorchatAiTabIds"
+    AI_TAB_IDS: "mirrorchatAiTabIds",
+    FOLDER_SEQ: "mirrorchatFolderSeq"
   };
 
   const TIMEOUT_MS = {
