@@ -448,10 +448,14 @@ async function runTask(task) {
     }
   }
 
+  const saveFailed = !saveResult.ok && hasAnyMarkdown;
+
   // ステータスメッセージを完了状態に更新（最後の「Grok の回答を取得中です...」を上書き）
   chrome.runtime.sendMessage?.({
     type: "MIRRORCHAT_STATUS",
-    text: "回答の取得と Obsidian への保存が完了しました。"
+    text: saveFailed
+      ? "Obsidian への保存に失敗しました。もう一度「回答を取得」を押して再試行してください。"
+      : "回答の取得と Obsidian への保存が完了しました。"
   });
 
   // 可能であれば MirrorChat のタブにフォーカスを戻す
@@ -461,14 +465,16 @@ async function runTask(task) {
     console.warn("MirrorChat: MirrorChatタブへのフォーカス復帰に失敗しました:", e);
   }
 
-  // 質問フローが完了したので現在のタスク情報をクリアする
-  try {
-    await new Promise((resolve) => chrome.storage.local.remove(CURRENT_TASK_KEY, resolve));
-  } catch (e) {
-    console.warn("MirrorChat: CURRENT_TASK_KEY の削除に失敗しました:", e);
+  // 保存成功時のみ質問フローを完了として CURRENT_TASK をクリアする（失敗時は再試行可能にするため残す）
+  if (!saveFailed) {
+    try {
+      await new Promise((resolve) => chrome.storage.local.remove(CURRENT_TASK_KEY, resolve));
+    } catch (e) {
+      console.warn("MirrorChat: CURRENT_TASK_KEY の削除に失敗しました:", e);
+    }
   }
 
-  chrome.runtime.sendMessage?.({ type: "MIRRORCHAT_DONE" });
+  chrome.runtime.sendMessage?.({ type: "MIRRORCHAT_DONE", saveFailed });
   processNext();
 }
 

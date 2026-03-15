@@ -161,9 +161,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     if (msg.type === "MIRRORCHAT_DONE") {
       updateRetryVisibility();
-      // 1回の質問フローが完了したので、新しい質問を送信可能にする
       sendButton.disabled = false;
-      collectButton.disabled = true;
+      // 保存失敗時は「回答を取得」を有効のままにして再試行可能にする
+      collectButton.disabled = !msg.saveFailed;
       refreshTabStatus();
     }
   });
