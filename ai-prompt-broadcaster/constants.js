@@ -8,7 +8,8 @@
   const STORAGE_KEYS = {
     FAILED_ITEMS: "mirrorchatFailedItems",
     CURRENT_TASK: "mirrorchatCurrentTask",
-    SETTINGS: "mirrorchatSettings"
+    SETTINGS: "mirrorchatSettings",
+    AI_TAB_IDS: "mirrorchatAiTabIds"
   };
 
   const TIMEOUT_MS = {

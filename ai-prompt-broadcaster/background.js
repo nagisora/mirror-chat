@@ -4,6 +4,7 @@ const { AI_KEYS, STORAGE_KEYS, TIMEOUT_MS, CONTENT_SCRIPTS } = self.MirrorChatCo
 const TASK_TIMEOUT_MS = TIMEOUT_MS.TASK;
 const FAILED_ITEMS_KEY = STORAGE_KEYS.FAILED_ITEMS;
 const CURRENT_TASK_KEY = STORAGE_KEYS.CURRENT_TASK;
+const AI_TAB_IDS_KEY = STORAGE_KEYS.AI_TAB_IDS;
 const FOCUS_DELAY_MS = TIMEOUT_MS.FOCUS_DELAY;
 
 const NOTIFICATION_ICON_URL = chrome.runtime.getURL("icon128.png");
@@ -24,6 +25,34 @@ function showNotification(title, message) {
 const aiTabIds = {};
 const queue = [];
 let processing = false;
+
+/** ストレージから aiTabIds を復元し、存在するタブのみ aiTabIds に反映する（Service Worker 再起動後の復帰用） */
+async function loadAiTabIds() {
+  if (Object.keys(aiTabIds).length > 0) return;
+  const stored = await new Promise((resolve) =>
+    chrome.storage.local.get(AI_TAB_IDS_KEY, (x) => resolve(x[AI_TAB_IDS_KEY] || {}))
+  );
+  for (const key of AI_KEYS) {
+    if (stored[key]) {
+      try {
+        await new Promise((res, rej) =>
+          chrome.tabs.get(stored[key], (t) => (chrome.runtime.lastError || !t ? rej() : res(t)))
+        );
+        aiTabIds[key] = stored[key];
+      } catch {
+        delete stored[key];
+      }
+    }
+  }
+  await saveAiTabIds();
+}
+
+/** 現在の aiTabIds をストレージに保存する */
+async function saveAiTabIds() {
+  await new Promise((resolve) =>
+    chrome.storage.local.set({ [AI_TAB_IDS_KEY]: { ...aiTabIds } }, resolve)
+  );
+}
 
 function getObsidianFolderName(question) {
   const cleaned = String(question)
@@ -88,12 +117,14 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     if (aiTabIds[key] === tabId) {
       delete aiTabIds[key];
       notifyAIStatus(key, "");
+      saveAiTabIds();
       break;
     }
   }
 });
 
 async function openAITabs() {
+  await loadAiTabIds();
   const settings = await self.MirrorChatStorage.getSettings();
   for (const aiKey of AI_KEYS) {
     const cfg = settings.aiConfigs?.[aiKey];
@@ -133,6 +164,7 @@ async function openAITabs() {
       notifyAIStatus(aiKey, "open");
     }
   }
+  await saveAiTabIds();
   return { ...aiTabIds };
 }
 
@@ -146,6 +178,7 @@ function closeAITabs() {
       notifyAIStatus(aiKey, "");
     }
   }
+  saveAiTabIds();
 }
 
 async function focusMirrorChatTab() {
@@ -415,10 +448,14 @@ async function runTask(task) {
     }
   }
 
+  const saveFailed = !saveResult.ok && hasAnyMarkdown;
+
   // ステータスメッセージを完了状態に更新（最後の「Grok の回答を取得中です...」を上書き）
   chrome.runtime.sendMessage?.({
     type: "MIRRORCHAT_STATUS",
-    text: "回答の取得と Obsidian への保存が完了しました。"
+    text: saveFailed
+      ? "Obsidian への保存に失敗しました。もう一度「回答を取得」を押して再試行してください。"
+      : "回答の取得と Obsidian への保存が完了しました。"
   });
 
   // 可能であれば MirrorChat のタブにフォーカスを戻す
@@ -428,14 +465,16 @@ async function runTask(task) {
     console.warn("MirrorChat: MirrorChatタブへのフォーカス復帰に失敗しました:", e);
   }
 
-  // 質問フローが完了したので現在のタスク情報をクリアする
-  try {
-    await new Promise((resolve) => chrome.storage.local.remove(CURRENT_TASK_KEY, resolve));
-  } catch (e) {
-    console.warn("MirrorChat: CURRENT_TASK_KEY の削除に失敗しました:", e);
+  // 保存成功時のみ質問フローを完了として CURRENT_TASK をクリアする（失敗時は再試行可能にするため残す）
+  if (!saveFailed) {
+    try {
+      await new Promise((resolve) => chrome.storage.local.remove(CURRENT_TASK_KEY, resolve));
+    } catch (e) {
+      console.warn("MirrorChat: CURRENT_TASK_KEY の削除に失敗しました:", e);
+    }
   }
 
-  chrome.runtime.sendMessage?.({ type: "MIRRORCHAT_DONE" });
+  chrome.runtime.sendMessage?.({ type: "MIRRORCHAT_DONE", saveFailed });
   processNext();
 }
 
@@ -514,24 +553,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === "MIRRORCHAT_GET_TAB_STATUS") {
-    // 開いているタブの状態を返す（ポップアップ再表示時の復帰用）
-    const validTabs = {};
-    const checks = AI_KEYS.map((key) => {
-      if (!aiTabIds[key]) return Promise.resolve();
-      return new Promise((resolve) => {
-        chrome.tabs.get(aiTabIds[key], (tab) => {
-          if (chrome.runtime.lastError || !tab) {
-            delete aiTabIds[key];
-          } else {
-            validTabs[key] = aiTabIds[key];
-          }
-          resolve();
+    (async () => {
+      await loadAiTabIds();
+      const validTabs = {};
+      const checks = AI_KEYS.map((key) => {
+        if (!aiTabIds[key]) return Promise.resolve();
+        return new Promise((resolve) => {
+          chrome.tabs.get(aiTabIds[key], (tab) => {
+            if (chrome.runtime.lastError || !tab) {
+              delete aiTabIds[key];
+            } else {
+              validTabs[key] = aiTabIds[key];
+            }
+            resolve();
+          });
         });
       });
-    });
-    Promise.all(checks).then(() => {
+      await Promise.all(checks);
+      await saveAiTabIds();
       sendResponse({ openTabs: validTabs });
-    });
+    })();
     return true;
   }
 
@@ -539,6 +580,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // 送信フェーズ: 各AIタブにプロンプトを設定して送信のみ行う（回答の取得は後続の FETCH フェーズ）
     (async () => {
       try {
+        await loadAiTabIds();
         const prompt = msg.prompt;
         // 現在の質問をローカルストレージに保持（ポップアップ再表示時などに利用）
         await new Promise((resolve) =>
@@ -578,12 +620,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   } else if (msg.type === "MIRRORCHAT_FETCH") {
     // 回答取得フェーズ: 現在の質問に対してタブを順番にフォーカスし、回答を収集してObsidianに保存
-    chrome.storage.local.get(CURRENT_TASK_KEY, (data) => {
+    chrome.storage.local.get(CURRENT_TASK_KEY, async (data) => {
       const current = data?.[CURRENT_TASK_KEY];
       if (!current || !current.prompt) {
         sendResponse({ ok: false, error: "取得対象の質問が見つかりませんでした" });
         return;
       }
+      await loadAiTabIds();
       queue.push({ prompt: current.prompt });
       if (!processing) processNext();
       sendResponse({ ok: true });
