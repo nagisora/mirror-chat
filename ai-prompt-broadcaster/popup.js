@@ -26,6 +26,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const status = document.getElementById("status");
   const retrySection = document.getElementById("retry-section");
   const retryButton = document.getElementById("retry-button");
+  const resaveButton = document.getElementById("resave-button");
 
   // constants.js が先に読み込まれる前提。フォールバックは念のため。
   const AI_KEYS = window.MirrorChatConstants?.AI_KEYS ?? ["chatgpt", "claude", "gemini", "grok"];
@@ -140,17 +141,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
-  retryButton.addEventListener("click", async () => {
+  function doResave() {
+    resaveButton.disabled = true;
     retryButton.disabled = true;
-    status.textContent = "再送信中...";
-    try {
-      chrome.runtime.sendMessage({ type: "MIRRORCHAT_RETRY" });
-      status.textContent = "再送信を開始しました。";
-    } catch (e) {
-      status.textContent = "再送信に失敗しました: " + (e.message || e);
-    }
-    retryButton.disabled = false;
-  });
+    status.textContent = "再保存中...";
+    chrome.runtime.sendMessage({ type: "MIRRORCHAT_RETRY" }, () => {
+      if (chrome.runtime.lastError) {
+        status.textContent = "再保存に失敗しました: " + chrome.runtime.lastError.message;
+      } else {
+        status.textContent = "再保存を開始しました。";
+      }
+      updateRetryVisibility();
+    });
+  }
+
+  retryButton.addEventListener("click", doResave);
+  resaveButton.addEventListener("click", doResave);
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === "MIRRORCHAT_STATUS") {
@@ -173,7 +179,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     const items = await new Promise((resolve) =>
       chrome.storage.local.get(key, (x) => resolve(x[key] || []))
     );
-    retrySection.hidden = items.length === 0;
+    const hasFailedItems = items.length > 0;
+    retrySection.hidden = !hasFailedItems;
+    resaveButton.disabled = !hasFailedItems;
   }
 
   updateRetryVisibility();
