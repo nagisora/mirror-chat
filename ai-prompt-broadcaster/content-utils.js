@@ -214,20 +214,43 @@ function pressEnterToSubmit(element) {
  */
 async function clickSubmitOrEnter(submitSelector, inputElement, timeout = 8000) {
   const start = Date.now();
+  const isClickable = (btn) => btn && !btn.disabled && btn.getAttribute("aria-disabled") !== "true";
+  const doClick = async (btn) => {
+    btn.scrollIntoView({ block: "center" });
+    await new Promise((r) => setTimeout(r, 100));
+    btn.click();
+    return true;
+  };
+
   while (Date.now() - start < timeout) {
     // セレクタをカンマ区切りで複数試行
     const selectors = submitSelector.split(",").map((s) => s.trim());
     for (const sel of selectors) {
       try {
         const btn = document.querySelector(sel);
-        if (btn && !btn.disabled && btn.getAttribute("aria-disabled") !== "true") {
-          btn.scrollIntoView({ block: "center" });
-          await new Promise((r) => setTimeout(r, 100));
-          btn.click();
+        if (isClickable(btn)) {
+          await doClick(btn);
           return true;
         }
       } catch { /* セレクタが不正な場合は無視 */ }
     }
+
+    // 入力欄近くの送信ボタンを探す（UI変更時のフォールバック）
+    if (inputElement) {
+      const form = inputElement.closest("form");
+      const container = inputElement.closest("[role='form'], [class*='composer'], [class*='input'], [class*='Composer']") || inputElement.parentElement;
+      const scope = form || container;
+      if (scope) {
+        const nearbyBtns = scope.querySelectorAll("button[type='submit'], button[aria-label*='Send'], button[aria-label*='送信'], [role='button'][aria-label*='Send']");
+        for (const b of nearbyBtns) {
+          if (isClickable(b)) {
+            await doClick(b);
+            return true;
+          }
+        }
+      }
+    }
+
     await new Promise((r) => setTimeout(r, 300));
   }
 
