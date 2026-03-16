@@ -512,17 +512,14 @@ async function runTask(task) {
   if (!saveResult.ok) {
     if (hasAnyMarkdown) {
       const failedPayload = { question: task.prompt, results, error: saveResult.error };
-      if (task.isFollowUp && task.basePath) {
+      // 続きの質問の場合は再試行用に basePath を保持する
+      if (task.isFollowUp) {
         failedPayload.isFollowUp = true;
-        failedPayload.basePath = task.basePath;
-      } else if (task.isFollowUp) {
-        const lastFolder = await new Promise((resolve) =>
-          chrome.storage.local.get(LAST_SAVED_FOLDER_KEY, (x) => resolve(x[LAST_SAVED_FOLDER_KEY]))
-        );
-        if (lastFolder) {
-          failedPayload.isFollowUp = true;
-          failedPayload.basePath = lastFolder;
-        }
+        failedPayload.basePath =
+          task.basePath ||
+          (await new Promise((resolve) =>
+            chrome.storage.local.get(LAST_SAVED_FOLDER_KEY, (x) => resolve(x[LAST_SAVED_FOLDER_KEY]))
+          ));
       }
       await appendFailedItemToLocal(failedPayload);
       showNotification("MirrorChat: 一部失敗", `Obsidian保存失敗。失敗: ${failed.join(", ")}。再送可能です。`);
