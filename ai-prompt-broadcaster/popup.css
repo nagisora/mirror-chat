@@ -62,6 +62,22 @@ label {
   margin-bottom: 8px;
 }
 
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.checkbox-row input[type="checkbox"] {
+  margin: 0;
+}
+
+.checkbox-row span {
+  font-size: 12px;
+  color: #444;
+}
+
 textarea {
   width: 100%;
   box-sizing: border-box;

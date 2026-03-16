@@ -6,6 +6,7 @@ const FAILED_ITEMS_KEY = STORAGE_KEYS.FAILED_ITEMS;
 const CURRENT_TASK_KEY = STORAGE_KEYS.CURRENT_TASK;
 const AI_TAB_IDS_KEY = STORAGE_KEYS.AI_TAB_IDS;
 const FOLDER_SEQ_KEY = STORAGE_KEYS.FOLDER_SEQ;
+const LAST_SAVED_FOLDER_KEY = STORAGE_KEYS.LAST_SAVED_FOLDER;
 const FOCUS_DELAY_MS = TIMEOUT_MS.FOCUS_DELAY;
 
 const NOTIFICATION_ICON_URL = chrome.runtime.getURL("icon128.png");
@@ -116,6 +117,55 @@ async function saveToObsidian(question, results, settings) {
       return { ok: false, error: res.error, payload: { question, results, basePath } };
     }
   }
+  await new Promise((resolve) =>
+    chrome.storage.local.set({ [LAST_SAVED_FOLDER_KEY]: basePath }, resolve)
+  );
+  return { ok: true };
+}
+
+/** 続きの質問を既存フォルダに追記する */
+async function appendToObsidian(basePath, question, results, settings) {
+  const { baseUrl, token } = settings.obsidian || {};
+
+  if (!baseUrl) {
+    return { ok: false, error: "ObsidianのベースURLが設定されていません" };
+  }
+
+  const questionAppend = `---\n\n## 続きの質問\n\n${question}\n\n`;
+  const resQuestion = await self.ObsidianClient.appendToNote(
+    baseUrl,
+    token,
+    `${basePath}/question.md`,
+    questionAppend
+  );
+  if (!resQuestion.ok) {
+    return { ok: false, error: resQuestion.error };
+  }
+
+  for (const r of results) {
+    const appendContent = `---\n\n### 続きの質問\n\n${question}\n\n### 回答\n\n${r.markdown || "(取得できませんでした)"}\n\n`;
+    const res = await self.ObsidianClient.appendToNote(
+      baseUrl,
+      token,
+      `${basePath}/${r.name}.md`,
+      appendContent
+    );
+    if (!res.ok) {
+      return { ok: false, error: res.error };
+    }
+  }
+
+  const summaryAppend = `---\n\n## 続きの質問\n\n${question}\n\n${buildSummary(results)}`;
+  const resSummary = await self.ObsidianClient.appendToNote(
+    baseUrl,
+    token,
+    `${basePath}/Summary.md`,
+    summaryAppend
+  );
+  if (!resSummary.ok) {
+    return { ok: false, error: resSummary.error };
+  }
+
   return { ok: true };
 }
 
@@ -445,16 +495,36 @@ async function runTask(task) {
   let saveResult = { ok: false };
 
   if (hasAnyMarkdown) {
-    saveResult = await saveToObsidian(task.prompt, results, settings);
+    if (task.isFollowUp) {
+      const basePath = task.basePath || (await new Promise((resolve) =>
+        chrome.storage.local.get(LAST_SAVED_FOLDER_KEY, (x) => resolve(x[LAST_SAVED_FOLDER_KEY]))
+      );
+      if (!basePath) {
+        saveResult = { ok: false, error: "続きの質問に対応する保存先フォルダが見つかりません。先に新規質問を送信・保存してください。" };
+      } else {
+        saveResult = await appendToObsidian(basePath, task.prompt, results, settings);
+      }
+    } else {
+      saveResult = await saveToObsidian(task.prompt, results, settings);
+    }
   }
 
   if (!saveResult.ok) {
     if (hasAnyMarkdown) {
-      await appendFailedItemToLocal({
-        question: task.prompt,
-        results,
-        error: saveResult.error
-      });
+      const failedPayload = { question: task.prompt, results, error: saveResult.error };
+      if (task.isFollowUp && task.basePath) {
+        failedPayload.isFollowUp = true;
+        failedPayload.basePath = task.basePath;
+      } else if (task.isFollowUp) {
+        const lastFolder = await new Promise((resolve) =>
+          chrome.storage.local.get(LAST_SAVED_FOLDER_KEY, (x) => resolve(x[LAST_SAVED_FOLDER_KEY]))
+        );
+        if (lastFolder) {
+          failedPayload.isFollowUp = true;
+          failedPayload.basePath = lastFolder;
+        }
+      }
+      await appendFailedItemToLocal(failedPayload);
       showNotification("MirrorChat: 一部失敗", `Obsidian保存失敗。失敗: ${failed.join(", ")}。再送可能です。`);
     } else {
       showNotification("MirrorChat: 取得失敗", `全てのAIから回答を取得できませんでした。Obsidianには保存しませんでした。`);
@@ -603,9 +673,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await loadAiTabIds();
         const prompt = msg.prompt;
         // 現在の質問をローカルストレージに保持（ポップアップ再表示時などに利用）
+        const isFollowUp = !!msg.isFollowUp;
         await new Promise((resolve) =>
           chrome.storage.local.set(
-            { [CURRENT_TASK_KEY]: { prompt, createdAt: Date.now() } },
+            { [CURRENT_TASK_KEY]: { prompt, createdAt: Date.now(), isFollowUp } },
             resolve
           )
         );
@@ -647,7 +718,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return;
       }
       await loadAiTabIds();
-      queue.push({ prompt: current.prompt });
+      queue.push({ prompt: current.prompt, isFollowUp: !!current.isFollowUp });
       if (!processing) processNext();
       sendResponse({ ok: true });
     });
@@ -656,7 +727,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     chrome.storage.local.get(FAILED_ITEMS_KEY, (x) => {
       const items = x[FAILED_ITEMS_KEY] || [];
       chrome.storage.local.set({ [FAILED_ITEMS_KEY]: [] });
-      items.forEach((it) => queue.push({ prompt: it.question, retryPayload: it }));
+      items.forEach((it) => {
+        const task = { prompt: it.question, retryPayload: it };
+        if (it.isFollowUp) task.isFollowUp = true;
+        if (it.basePath) task.basePath = it.basePath;
+        queue.push(task);
+      });
       if (!processing && queue.length > 0) processNext();
       sendResponse({ ok: true });
     });
