@@ -22,7 +22,8 @@
       const submitSelector = config.submitButtonSelector;
       const answerSelector = config.answerContainerSelector;
       const copySelector = config.copyButtonSelector;
-      const doneSelector = config.doneCheckSelector || "";
+      // ストレージに空が保存されていても defaultConfig の doneCheckSelector をフォールバック
+      const doneSelector = (config.doneCheckSelector || defaultConfig.doneCheckSelector || "").trim() || "";
       const submitMethod = config.submitMethod || "clickSubmitOrEnter";
       const useInputSuccessFallback = config.inputSuccessFallback === "chatgpt";
 
