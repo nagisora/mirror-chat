@@ -10,7 +10,8 @@
     CURRENT_TASK: "mirrorchatCurrentTask",
     SETTINGS: "mirrorchatSettings",
     AI_TAB_IDS: "mirrorchatAiTabIds",
-    FOLDER_SEQ: "mirrorchatFolderSeq"
+    FOLDER_SEQ: "mirrorchatFolderSeq",
+    LAST_SAVED_FOLDER: "mirrorchatLastSavedFolder"
   };
 
   const TIMEOUT_MS = {
