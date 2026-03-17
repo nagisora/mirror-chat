@@ -80,6 +80,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         openTabsButton.disabled = false;
         return;
       }
+      if (!resp || !resp.ok) {
+        status.textContent = "タブを開けませんでした: " + (resp?.error || "不明なエラー");
+        openTabsButton.disabled = false;
+        return;
+      }
       status.textContent = "AIサイトを開きました。ログイン等を済ませてから質問を送信してください。";
       updateTabUI(resp?.openTabs);
     });

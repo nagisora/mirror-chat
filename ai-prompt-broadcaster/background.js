@@ -498,7 +498,7 @@ async function runTask(task) {
     if (task.isFollowUp) {
       const basePath = task.basePath || (await new Promise((resolve) =>
         chrome.storage.local.get(LAST_SAVED_FOLDER_KEY, (x) => resolve(x[LAST_SAVED_FOLDER_KEY]))
-      );
+      ));
       if (!basePath) {
         saveResult = { ok: false, error: "続きの質問に対応する保存先フォルダが見つかりません。先に新規質問を送信・保存してください。" };
       } else {
@@ -627,9 +627,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === "MIRRORCHAT_OPEN_TABS") {
-    openAITabs().then((tabs) => {
-      sendResponse({ ok: true, openTabs: tabs });
-    });
+    openAITabs()
+      .then((tabs) => {
+        sendResponse({ ok: true, openTabs: tabs });
+      })
+      .catch((e) => {
+        console.error("MirrorChat openAITabs error:", e);
+        sendResponse({ ok: false, error: e?.message || String(e) });
+      });
     return true;
   }
 
