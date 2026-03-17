@@ -34,7 +34,7 @@
 
 ```
 200-AI Research/
-└── YYYY-MM-DD_質問の要約_ID/
+└── YYYYMMDD-連番-質問の先頭20文字/
     ├── 01-Question.md      # 元の質問
     ├── 02-01-ChatGPT.md
     ├── 02-02-Claude.md

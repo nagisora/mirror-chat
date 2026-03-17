@@ -73,7 +73,7 @@ async function getNextFolderSeq() {
   return stored.seq;
 }
 
-/** フォルダ名を生成: YYYY-MM-DD_質問の要約_ID（ワークフロー形式） */
+/** フォルダ名を生成: YYYYMMDD-連番-質問の先頭20文字（-連番- はその日の連番） */
 async function getObsidianFolderName(question) {
   const cleaned = String(question)
     .replace(/[\r\n]/g, " ")
@@ -81,10 +81,10 @@ async function getObsidianFolderName(question) {
   const safe = Array.from(cleaned.trim())
     .slice(0, 20)
     .join("") || "q";
-  const date = new Date().toISOString().slice(0, 10);
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const seq = await getNextFolderSeq();
   const seqStr = String(seq).padStart(2, "0");
-  return `${date}_${safe}_${seqStr}`;
+  return `${date}-${seqStr}-${safe}`;
 }
 
 /** AIキーから項番付きファイル名を取得 */
