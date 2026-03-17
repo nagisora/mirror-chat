@@ -111,7 +111,7 @@ async function waitForResponseComplete(answerContainerSelector, doneCheckSelecto
     while (Date.now() - start < maxWaitMs) {
       const indicator = document.querySelector(doneCheckSelector);
       if (!indicator) break; // 停止ボタン等が消えた = 応答完了
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 300)); // 300ms間隔でポーリング（応答完了の検出を高速化）
     }
   }
 
@@ -214,20 +214,56 @@ function pressEnterToSubmit(element) {
  */
 async function clickSubmitOrEnter(submitSelector, inputElement, timeout = 8000) {
   const start = Date.now();
+  const isClickable = (btn) => btn && !btn.disabled && btn.getAttribute("aria-disabled") !== "true";
+  const doClick = async (btn) => {
+    btn.scrollIntoView({ block: "center" });
+    await new Promise((r) => setTimeout(r, 100));
+    btn.click();
+    return true;
+  };
+
+  // 入力欄がある場合はフォーム内に検索を限定（サイドバートグル等の誤一致を防ぐ）
+  const scope = inputElement
+    ? inputElement.closest("form") ||
+      inputElement.closest("[class*='box-content']") ||
+      inputElement.closest("[class*='composer']") ||
+      inputElement.closest("[class*='Composer']") ||
+      inputElement.closest("main") ||
+      document
+    : document;
+
   while (Date.now() - start < timeout) {
-    // セレクタをカンマ区切りで複数試行
+    // セレクタをカンマ区切りで複数試行（scope 内で検索）
     const selectors = submitSelector.split(",").map((s) => s.trim());
     for (const sel of selectors) {
       try {
-        const btn = document.querySelector(sel);
-        if (btn && !btn.disabled && btn.getAttribute("aria-disabled") !== "true") {
-          btn.scrollIntoView({ block: "center" });
-          await new Promise((r) => setTimeout(r, 100));
-          btn.click();
+        const btn = scope.querySelector(sel);
+        if (isClickable(btn)) {
+          await doClick(btn);
           return true;
         }
       } catch { /* セレクタが不正な場合は無視 */ }
     }
+
+    // 入力欄近くの送信ボタンを探す（UI変更時のフォールバック）
+    if (inputElement) {
+      const form = inputElement.closest("form");
+      const container =
+        inputElement.closest("[role='form'], [class*='box-content'], [class*='composer'], [class*='input'], [class*='Composer']") ||
+        inputElement.parentElement;
+      const fallbackScope = form || container;
+      if (fallbackScope) {
+        const nearbyBtns = fallbackScope.querySelectorAll("button[type='submit'], button[aria-label*='Send'], button[aria-label*='送信'], [role='button'][aria-label*='Send']");
+        for (const b of nearbyBtns) {
+          if (b.getAttribute("data-testid") === "pin-sidebar-toggle") continue;
+          if (isClickable(b)) {
+            await doClick(b);
+            return true;
+          }
+        }
+      }
+    }
+
     await new Promise((r) => setTimeout(r, 300));
   }
 

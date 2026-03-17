@@ -19,6 +19,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   const promptInput = document.getElementById("prompt-input");
+  const followUpCheckbox = document.getElementById("follow-up-checkbox");
   const sendButton = document.getElementById("send-button");
   const collectButton = document.getElementById("collect-button");
   const openTabsButton = document.getElementById("open-tabs-button");
@@ -79,6 +80,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         openTabsButton.disabled = false;
         return;
       }
+      if (!resp || !resp.ok) {
+        status.textContent = "タブを開けませんでした: " + (resp?.error || "不明なエラー");
+        openTabsButton.disabled = false;
+        return;
+      }
       status.textContent = "AIサイトを開きました。ログイン等を済ませてから質問を送信してください。";
       updateTabUI(resp?.openTabs);
     });
@@ -98,14 +104,19 @@ document.addEventListener("DOMContentLoaded", async () => {
       status.textContent = "質問を入力してください。";
       return;
     }
+    const isFollowUp = followUpCheckbox.checked;
+    if (isFollowUp) {
+      status.textContent = "続きの質問を送信中...各AIの既存会話に追加されます。回答生成完了後に「回答を取得」を押してください。";
+    } else {
+      status.textContent = "送信中...各AIに質問を送っています。回答生成完了後に「回答を取得」を押してください。";
+    }
     // 一度送信した質問が処理中の間は、新しい送信は行わない
     sendButton.disabled = true;
     collectButton.disabled = false;
-    status.textContent = "送信中...各AIに質問を送っています。回答生成完了後に「回答を取得」を押してください。";
 
     AI_KEYS.forEach((key) => setIndicator(key, "sending"));
 
-    chrome.runtime.sendMessage({ type: "MIRRORCHAT_SEND", prompt: text }, (resp) => {
+    chrome.runtime.sendMessage({ type: "MIRRORCHAT_SEND", prompt: text, isFollowUp }, (resp) => {
       if (chrome.runtime.lastError) {
         status.textContent = "送信に失敗しました: " + chrome.runtime.lastError.message;
         sendButton.disabled = false;
@@ -193,6 +204,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const current = data?.[currentTaskKey];
     if (current?.prompt) {
       promptInput.value = current.prompt;
+      followUpCheckbox.checked = !!current.isFollowUp;
       status.textContent = "前回の質問の回答が未取得です。「回答を取得」を押してObsidianに保存してください。";
     }
   });
