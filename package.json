@@ -1,0 +1,7 @@
+{
+  "name": "mirror-chat",
+  "private": true,
+  "scripts": {
+    "check": "bash scripts/check-syntax.sh"
+  }
+}

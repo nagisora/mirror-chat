@@ -214,6 +214,17 @@ test.describe("MirrorChat 拡張機能", () => {
     expect(hasOpen).toBe(true);
   });
 
+  test("既存の会話に続けて送信のチェックボックスが表示される", async ({ page, extensionId }) => {
+    await page.goto(`chrome-extension://${extensionId}/popup.html?standalone=1`);
+
+    const followUpCheckbox = page.locator("#follow-up-checkbox");
+    await expect(followUpCheckbox).toBeVisible();
+    await expect(page.locator("label.checkbox-row")).toContainText("既存の会話に続けて送信");
+
+    // チェックボックスは初期状態で未チェック
+    await expect(followUpCheckbox).not.toBeChecked();
+  });
+
   test("ポップアップ再表示時にタブ状態が復帰する", async ({ context, page, extensionId }) => {
     // 前のテストの残留状態をクリア（CURRENT_TASK があると hasPendingQuestion で送信ボタンが無効になる）
     await page.goto(`chrome-extension://${extensionId}/popup.html?standalone=1`);

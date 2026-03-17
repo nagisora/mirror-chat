@@ -222,12 +222,22 @@ async function clickSubmitOrEnter(submitSelector, inputElement, timeout = 8000) 
     return true;
   };
 
+  // 入力欄がある場合はフォーム内に検索を限定（サイドバートグル等の誤一致を防ぐ）
+  const scope = inputElement
+    ? inputElement.closest("form") ||
+      inputElement.closest("[class*='box-content']") ||
+      inputElement.closest("[class*='composer']") ||
+      inputElement.closest("[class*='Composer']") ||
+      inputElement.closest("main") ||
+      document
+    : document;
+
   while (Date.now() - start < timeout) {
-    // セレクタをカンマ区切りで複数試行
+    // セレクタをカンマ区切りで複数試行（scope 内で検索）
     const selectors = submitSelector.split(",").map((s) => s.trim());
     for (const sel of selectors) {
       try {
-        const btn = document.querySelector(sel);
+        const btn = scope.querySelector(sel);
         if (isClickable(btn)) {
           await doClick(btn);
           return true;
@@ -238,11 +248,14 @@ async function clickSubmitOrEnter(submitSelector, inputElement, timeout = 8000) 
     // 入力欄近くの送信ボタンを探す（UI変更時のフォールバック）
     if (inputElement) {
       const form = inputElement.closest("form");
-      const container = inputElement.closest("[role='form'], [class*='composer'], [class*='input'], [class*='Composer']") || inputElement.parentElement;
-      const scope = form || container;
-      if (scope) {
-        const nearbyBtns = scope.querySelectorAll("button[type='submit'], button[aria-label*='Send'], button[aria-label*='送信'], [role='button'][aria-label*='Send']");
+      const container =
+        inputElement.closest("[role='form'], [class*='box-content'], [class*='composer'], [class*='input'], [class*='Composer']") ||
+        inputElement.parentElement;
+      const fallbackScope = form || container;
+      if (fallbackScope) {
+        const nearbyBtns = fallbackScope.querySelectorAll("button[type='submit'], button[aria-label*='Send'], button[aria-label*='送信'], [role='button'][aria-label*='Send']");
         for (const b of nearbyBtns) {
+          if (b.getAttribute("data-testid") === "pin-sidebar-toggle") continue;
           if (isClickable(b)) {
             await doClick(b);
             return true;
