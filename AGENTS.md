@@ -49,6 +49,7 @@ mkdir -p /home/ubuntu/ObsidianVault
 - 構文チェック: `pnpm check` で ai-prompt-broadcaster 内の全 JS ファイルの構文を検証（`node -c`）
 - E2E テスト: `e2e/` ディレクトリで Playwright による自動テストを実行可能。`cd e2e && pnpm test`
 - ログイン済み Chrome プロファイルを使うと送信〜回答取得までフルにテスト可能。未ログインの場合は基本動作のみ検証。
+- Cloud Agent でフルテストする場合: プロファイルを `e2e/chrome-profile.zip` に配置し、`cd e2e && pnpm test:with-profile:headed` を実行。手順は `docs/E2E_LOGIN_PROFILE.md` を参照。
 - 手動テストには Chrome ブラウザと、各AIサービスへのログイン、Obsidian + Local REST API プラグインが必要。
 - 詳細な利用手順は `docs/CHROME_EXTENSION_USAGE.md` を参照。
 
