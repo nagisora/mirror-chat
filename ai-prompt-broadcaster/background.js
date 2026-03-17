@@ -73,7 +73,7 @@ async function getNextFolderSeq() {
   return stored.seq;
 }
 
-/** フォルダ名を生成: 20260315-01-質問の先頭20文字（日付ハイフンなし、項番付き、質問順に並ぶ） */
+/** フォルダ名を生成: YYYY-MM-DD_質問の要約_ID（ワークフロー形式） */
 async function getObsidianFolderName(question) {
   const cleaned = String(question)
     .replace(/[\r\n]/g, " ")
@@ -81,10 +81,22 @@ async function getObsidianFolderName(question) {
   const safe = Array.from(cleaned.trim())
     .slice(0, 20)
     .join("") || "q";
-  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const date = new Date().toISOString().slice(0, 10);
   const seq = await getNextFolderSeq();
   const seqStr = String(seq).padStart(2, "0");
-  return `${date}-${seqStr}-${safe}`;
+  return `${date}_${safe}_${seqStr}`;
+}
+
+/** AIキーから項番付きファイル名を取得 */
+const AI_NUMBERED_FILES = {
+  chatgpt: "02-01-ChatGPT.md",
+  claude: "02-02-Claude.md",
+  gemini: "02-03-Gemini.md",
+  grok: "02-04-Grok.md"
+};
+
+function getNumberedFileName(aiKey) {
+  return AI_NUMBERED_FILES[aiKey] || null;
 }
 
 function buildSummary(results) {
@@ -106,9 +118,12 @@ async function saveToObsidian(question, results, settings) {
   }
 
   const files = [
-    { path: `${basePath}/question.md`, content: question },
-    ...results.map((r) => ({ path: `${basePath}/${r.name}.md`, content: r.markdown || "" })),
-    { path: `${basePath}/Summary.md`, content: buildSummary(results) }
+    { path: `${basePath}/01-Question.md`, content: question },
+    ...results.map((r) => {
+      const fname = getNumberedFileName(r.ai);
+      return { path: `${basePath}/${fname || `${r.name}.md`}`, content: r.markdown || "" };
+    }),
+    { path: `${basePath}/03-Summary.md`, content: buildSummary(results) }
   ];
 
   for (const f of files) {
@@ -135,7 +150,7 @@ async function appendToObsidian(basePath, question, results, settings) {
   const resQuestion = await self.ObsidianClient.appendToNote(
     baseUrl,
     token,
-    `${basePath}/question.md`,
+    `${basePath}/01-Question.md`,
     questionAppend
   );
   if (!resQuestion.ok) {
@@ -143,11 +158,12 @@ async function appendToObsidian(basePath, question, results, settings) {
   }
 
   for (const r of results) {
+    const fname = getNumberedFileName(r.ai) || `${r.name}.md`;
     const appendContent = `---\n\n### 続きの質問\n\n${question}\n\n### 回答\n\n${r.markdown || "(取得できませんでした)"}\n\n`;
     const res = await self.ObsidianClient.appendToNote(
       baseUrl,
       token,
-      `${basePath}/${r.name}.md`,
+      `${basePath}/${fname}`,
       appendContent
     );
     if (!res.ok) {
@@ -159,7 +175,7 @@ async function appendToObsidian(basePath, question, results, settings) {
   const resSummary = await self.ObsidianClient.appendToNote(
     baseUrl,
     token,
-    `${basePath}/Summary.md`,
+    `${basePath}/03-Summary.md`,
     summaryAppend
   );
   if (!resSummary.ok) {
