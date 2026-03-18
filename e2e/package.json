@@ -4,7 +4,9 @@
   "scripts": {
     "test": "playwright test",
     "test:headed": "playwright test --headed",
-    "test:ui": "playwright test --ui"
+    "test:ui": "playwright test --ui",
+    "test:with-profile": "./test-with-profile.sh",
+    "test:with-profile:headed": "./test-with-profile.sh --headed"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0"
