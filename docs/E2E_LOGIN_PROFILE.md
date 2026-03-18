@@ -11,68 +11,50 @@ Cloud Agent 環境など、リモートで E2E テストを実行する際に、
 
 ---
 
-## 手順 1: ローカルで Chrome プロファイルをエクスポート
+## 手順 1: ローカルで Chrome プロファイルをエクスポート（Linux Flatpak）
 
 ### 1. Chrome を完全に終了する
 
 タスクマネージャーで `chrome` / `Google Chrome` が残っていないことを確認してください。
 
-### 2. User Data ディレクトリの場所を確認
+### 2. エクスポート用スクリプトを実行
 
-| OS | User Data ディレクトリ |
-|----|------------------------|
-| Linux | `~/.config/google-chrome` |
-| macOS | `~/Library/Application Support/Google/Chrome` |
-| Windows | `%LOCALAPPDATA%\Google\Chrome\User Data` |
+Flatpak 版 Chrome のプロファイルは `~/.var/app/com.google.Chrome/config/google-chrome` にあります。
 
-`Default` フォルダと `Local State` ファイルが含まれています。
-
-### 3. 必要なファイルを zip にまとめる
-
-**Linux の例:**
+**Default プロファイルを使う場合:**
 
 ```bash
-# 作業用ディレクトリを作成
 mkdir -p /tmp/chrome-profile-export
 cd /tmp/chrome-profile-export
 
-PROFILE=~/.config/google-chrome  # Linux
-# PROFILE=~/Library/Application\ Support/Google/Chrome  # macOS
+PROFILE=~/.var/app/com.google.Chrome/config/google-chrome
 
-# Default プロファイルと Local State をコピー
 cp -r "$PROFILE/Default" ./Default
 cp "$PROFILE/Local State" ./Local\ State 2>/dev/null || true
 
-# zip に圧縮
 zip -r chrome-profile.zip Default
 [[ -f "Local State" ]] && zip -u chrome-profile.zip "Local State"
 ```
 
-**最小限のファイル（軽量化・転送サイズ削減）:**
+**専用プロファイル（Profile 1 など）を使う場合:**
 
-認証に必要な主なファイル:
-- `Default/Cookies` - セッション Cookie
-- `Default/Local Storage/` - ローカルストレージ
-- `Default/Network Persistent State` - ネットワーク状態
-- `Local State` - ブラウザ設定
+E2E テストは `Default` というフォルダ名を期待するため、コピー時にリネームします。
 
 ```bash
-mkdir -p /tmp/chrome-profile-minimal/Default
-cd /tmp/chrome-profile-minimal
-PROFILE=~/.config/google-chrome  # Linux
+mkdir -p /tmp/chrome-profile-export
+cd /tmp/chrome-profile-export
 
-cp "$PROFILE/Default/Cookies" Default/ 2>/dev/null || true
-cp "$PROFILE/Default/Network Persistent State" Default/ 2>/dev/null || true
-cp -r "$PROFILE/Default/Local Storage" Default/ 2>/dev/null || true
-cp "$PROFILE/Local State" . 2>/dev/null || true
+PROFILE=~/.var/app/com.google.Chrome/config/google-chrome
+PROFILE_NAME="Profile 1"   # 実際のプロファイル名に合わせて変更
+
+cp -r "$PROFILE/$PROFILE_NAME" ./Default
+cp "$PROFILE/Local State" ./Local\ State 2>/dev/null || true
 
 zip -r chrome-profile.zip Default
 [[ -f "Local State" ]] && zip -u chrome-profile.zip "Local State"
 ```
 
-**重要**: zip を展開すると `Default/` と `Local State` が同じ階層に並ぶ構造にしてください。
-
-### 4. zip をワークスペースに配置
+### 3. zip をワークスペースに配置
 
 - Cursor のファイルエクスプローラーで `e2e/chrome-profile.zip` にドラッグ＆ドロップでアップロード
 - または、`/workspace/e2e/chrome-profile.zip` に配置
@@ -94,7 +76,58 @@ pnpm run test:with-profile
 
 ---
 
-## 手動で実行する場合
+## トラブルシューティング
+
+### プロファイルが認識されない
+
+- `Default` フォルダが `.chrome-profile/` 直下にあることを確認
+- `Local State` が同じ階層にあることを確認
+- 専用プロファイルを使う場合、zip 内のフォルダ名を `Default` にリネームしてから含めているか確認
+
+### ログインが切れている
+
+- セッションの有効期限が切れている可能性があります
+- ローカルで再度ログインし、プロファイルを再エクスポートしてください
+
+---
+
+<details>
+<summary><strong>その他の環境（Linux 通常版 / macOS / Windows）</strong></summary>
+
+### User Data ディレクトリの場所
+
+| 環境 | パス |
+|------|------|
+| Linux（通常） | `~/.config/google-chrome` |
+| Linux（Flatpak） | `~/.var/app/com.google.Chrome/config/google-chrome` |
+| macOS | `~/Library/Application Support/Google/Chrome` |
+| Windows | `%LOCALAPPDATA%\Google\Chrome\User Data` |
+
+上記のパス表の `PROFILE` 変数を、ご利用の環境に合わせて変更してください。
+
+### 軽量化（最小限のファイルのみエクスポート）
+
+認証に必要な主なファイル:
+- `Default/Cookies` - セッション Cookie
+- `Default/Local Storage/` - ローカルストレージ
+- `Default/Network Persistent State` - ネットワーク状態
+- `Local State` - ブラウザ設定
+
+```bash
+mkdir -p /tmp/chrome-profile-minimal/Default
+cd /tmp/chrome-profile-minimal
+PROFILE=~/.var/app/com.google.Chrome/config/google-chrome  # 環境に合わせて変更
+
+cp "$PROFILE/Default/Cookies" Default/ 2>/dev/null || true
+cp "$PROFILE/Default/Network Persistent State" Default/ 2>/dev/null || true
+cp -r "$PROFILE/Default/Local Storage" Default/ 2>/dev/null || true
+cp "$PROFILE/Local State" . 2>/dev/null || true
+
+zip -r chrome-profile.zip Default
+[[ -f "Local State" ]] && zip -u chrome-profile.zip "Local State"
+```
+
+### 手動でテストを実行する場合
 
 ```bash
 cd /workspace/e2e
@@ -106,20 +139,4 @@ unzip -o chrome-profile.zip -d .chrome-profile/
 MIRRORCHAT_USER_DATA_DIR=/workspace/e2e/.chrome-profile pnpm test:headed
 ```
 
----
-
-## トラブルシューティング
-
-### プロファイルが認識されない
-
-- `Default` フォルダが `.chrome-profile/` 直下にあることを確認
-- `Local State` が同じ階層にあることを確認
-
-### ログインが切れている
-
-- セッションの有効期限が切れている可能性があります
-- ローカルで再度ログインし、プロファイルを再エクスポートしてください
-
-### パスが異なる（macOS / Windows）
-
-- 上記のパス表を参照し、ご利用の OS に合わせてパスを変更してください
+</details>
