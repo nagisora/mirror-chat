@@ -34,13 +34,13 @@
 
 ```
 200-AI Research/
-└── YYYYMMDD-01-質問の先頭20文字/
-    ├── question.md    # 元の質問
-    ├── ChatGPT.md
-    ├── Claude.md
-    ├── Gemini.md
-    ├── Grok.md
-    └── Summary.md    # 全回答をまとめたファイル
+└── YYYYMMDD-連番-質問の先頭20文字/
+    ├── 01-Question.md      # 元の質問
+    ├── 02-01-ChatGPT.md
+    ├── 02-02-Claude.md
+    ├── 02-03-Gemini.md
+    ├── 02-04-Grok.md
+    └── 03-Summary.md       # 全回答をまとめたファイル
 ```
 
 ## 設定
