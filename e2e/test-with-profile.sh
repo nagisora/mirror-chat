@@ -28,4 +28,7 @@ unzip -q -o "$PROFILE_ZIP" -d "$PROFILE_DIR"
 
 echo "ログイン済みプロファイルでテストを実行します..."
 export MIRRORCHAT_USER_DATA_DIR="$PROFILE_DIR"
-exec pnpm test "$@"
+# フルフロー（送信〜回答取得）スペックを有効化（未設定時のみ）
+export MIRRORCHAT_E2E_FULL="${MIRRORCHAT_E2E_FULL:-1}"
+# playwright へ引数をそのまま渡す（例: --headed, --grep）
+exec pnpm exec playwright test "$@"

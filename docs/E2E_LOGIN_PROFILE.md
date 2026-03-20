@@ -72,7 +72,16 @@ pnpm run test:with-profile
 
 このスクリプトは以下を行います:
 1. `chrome-profile.zip` を `e2e/.chrome-profile/` に展開
-2. `MIRRORCHAT_USER_DATA_DIR` を設定してテストを実行
+2. `MIRRORCHAT_USER_DATA_DIR` と `MIRRORCHAT_E2E_FULL=1` を設定して Playwright を実行（送信〜回答取得のフルフロー用スペックが有効になる）
+
+### フルフロー用の環境変数
+
+| 変数 | 説明 |
+|------|------|
+| `MIRRORCHAT_E2E_FULL` | `1` で `tests/mirrorchat-full-flow.spec.js` が実行される（`test-with-profile` が既定で設定） |
+| `MIRRORCHAT_E2E_REQUIRE_OBSIDIAN` | 既定 `1`。`0` にすると Obsidian 保存の成否は問わず、4サイトとも回答取得（インジケータ `done`）までを検証（Computer Use で Obsidian 未起動のとき向け） |
+| `MIRRORCHAT_E2E_AFTER_OPEN_WAIT_MS` | タブオープン後の待ち（既定 30000） |
+| `MIRRORCHAT_E2E_POST_SEND_WAIT_MS` | 送信完了から「回答を取得」クリックまでの待ち（既定 180000） |
 
 ---
 
