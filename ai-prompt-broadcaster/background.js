@@ -554,11 +554,14 @@ async function runTask(task) {
   const saveFailed = !saveResult.ok && hasAnyMarkdown;
 
   // ステータスメッセージを完了状態に更新（最後の「Grok の回答を取得中です...」を上書き）
+  const terminalStatusText = saveFailed
+    ? "Obsidian への保存に失敗しました。もう一度「回答を取得」を押して再試行してください。"
+    : hasAnyMarkdown
+      ? "回答の取得と Obsidian への保存が完了しました。"
+      : "いずれのAIからも回答テキストを取得できませんでした。タブのログイン状態を確認してください。";
   chrome.runtime.sendMessage?.({
     type: "MIRRORCHAT_STATUS",
-    text: saveFailed
-      ? "Obsidian への保存に失敗しました。もう一度「回答を取得」を押して再試行してください。"
-      : "回答の取得と Obsidian への保存が完了しました。"
+    text: terminalStatusText
   });
 
   // 可能であれば MirrorChat のタブにフォーカスを戻す
