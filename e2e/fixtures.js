@@ -26,6 +26,30 @@ const defaultUserDataDir = path.join(__dirname, ".playwright-user-data");
  */
 const userDataDir = process.env.MIRRORCHAT_USER_DATA_DIR || defaultUserDataDir;
 
+function hasCustomUserData() {
+  return (
+    !!process.env.MIRRORCHAT_USER_DATA_DIR &&
+    path.resolve(userDataDir) !== path.resolve(defaultUserDataDir)
+  );
+}
+
+/** MirrorChat MV3 の service_worker（background.js）に一致する拡張 ID を返す */
+function mirrorChatExtensionIdFromContext(context) {
+  const workers = context.serviceWorkers();
+  const backgroundWorkers = workers.filter((sw) =>
+    /^chrome-extension:\/\/[^/]+\/background\.js(\?|$)/i.test(sw.url())
+  );
+  if (backgroundWorkers.length >= 1) {
+    const m = /^chrome-extension:\/\/([^/]+)\//i.exec(backgroundWorkers[0].url());
+    if (m) return m[1];
+  }
+  for (const sw of workers) {
+    const m = /^chrome-extension:\/\/([^/]+)\//i.exec(sw.url());
+    if (m) return m[1];
+  }
+  return null;
+}
+
 function isExecutableFile(p) {
   try {
     fs.accessSync(p, fs.constants.X_OK);
@@ -70,11 +94,7 @@ function launchOptionsForProfile() {
     ignoreDefaultArgs: ["--disable-extensions"],
   };
 
-  const hasCustomUserData =
-    !!process.env.MIRRORCHAT_USER_DATA_DIR &&
-    path.resolve(userDataDir) !== path.resolve(defaultUserDataDir);
-
-  if (!hasCustomUserData) {
+  if (!hasCustomUserData()) {
     return base;
   }
 
@@ -97,18 +117,39 @@ const test = base.extend({
   context: async ({}, use) => {
     // Chrome拡張は headed モード必須。CI では xvfb で仮想ディスプレイを使用
     const context = await chromium.launchPersistentContext(userDataDir, launchOptionsForProfile());
+    // ログイン済みプロファイルはセッション復元でタブ・ウィンドウが増えることがあり、
+    // 画面上は about:blank のままに見えて Playwright が操作しているタブとずれる。先に閉じておく。
+    if (hasCustomUserData()) {
+      for (const p of context.pages()) {
+        await p.close().catch(() => {});
+      }
+    }
     await use(context);
     await context.close();
   },
 
   extensionId: async ({ context }, use) => {
-    let [serviceWorker] = context.serviceWorkers();
-    if (!serviceWorker) {
-      serviceWorker = await context.waitForEvent("serviceworker", { timeout: 15_000 });
+    const timeoutMs = hasCustomUserData() ? 120_000 : 25_000;
+    const deadline = Date.now() + timeoutMs;
+    let id = mirrorChatExtensionIdFromContext(context);
+    while (!id && Date.now() < deadline) {
+      const slice = Math.min(5_000, Math.max(1_000, deadline - Date.now()));
+      try {
+        await context.waitForEvent("serviceworker", { timeout: slice });
+      } catch {
+        /* 待機スライス切れ。登録済み SW を再スキャン */
+      }
+      id = mirrorChatExtensionIdFromContext(context);
     }
-    const url = serviceWorker.url();
-    const extensionId = url.split("/")[2];
-    await use(extensionId);
+    if (!id) {
+      const urls = context.serviceWorkers().map((w) => w.url());
+      throw new Error(
+        `MirrorChat の service worker が ${timeoutMs}ms 以内に見つかりませんでした。` +
+          `登録済み SW: ${urls.length ? urls.join(" | ") : "(なし)"}。` +
+          `プロファイル起動が重い場合は時間をおいて再実行するか、他拡張を無効化してください。`
+      );
+    }
+    await use(id);
   },
 });
 

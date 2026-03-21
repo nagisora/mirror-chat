@@ -109,6 +109,11 @@ MIRRORCHAT_E2E_FULL=1 pnpm exec playwright test --grep "フルフロー"
 - セッションの有効期限が切れている可能性があります
 - ローカルで再度ログインし、プロファイルを再エクスポートしてください
 
+### ブラウザは開くがずっと `about:blank` のまま／テストがすぐ失敗する
+
+- Chrome が **前回のセッションを復元**して別ウィンドウ・別タブを開いていると、目に見えているタブと Playwright が操作しているタブが一致しないことがあります。E2E ではカスタムプロファイル時に起動直後の既存タブを閉じる処理を入れています（`e2e/fixtures.js`）。
+- それでも不安定な場合は、手元の Chrome で当該プロファイルを開き、不要なウィンドウを閉じてから **正常終了**してから zip を取り直すと改善することがあります。
+
 ### Playwright が Chrome を起動できない（`EACCES` / `distribution 'chrome' is not found`）
 
 - **Chromium だけでは Cookie が読めない**: 上記のとおり、カスタムプロファイル時は Google Chrome 本体の起動を試みます。
