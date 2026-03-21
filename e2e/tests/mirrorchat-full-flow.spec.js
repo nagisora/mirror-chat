@@ -100,7 +100,7 @@ test.describe("フルフロー（ログイン済みプロファイル）", () =>
         );
         await expect(page.locator("#collect-button")).toBeDisabled();
       } else {
-        await expect(page.locator("#status")).toMatch(
+        await expect(page.locator("#status")).toHaveText(
           /回答の取得と Obsidian への保存が完了しました。|Obsidian への保存に失敗しました/
         );
       }
