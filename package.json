@@ -2,8 +2,7 @@
   "name": "mirror-chat",
   "private": true,
   "scripts": {
-    "lint": "eslint ai-prompt-broadcaster",
-    "check": "eslint ai-prompt-broadcaster"
+    "lint": "eslint ai-prompt-broadcaster"
   },
   "devDependencies": {
     "@eslint/js": "10",

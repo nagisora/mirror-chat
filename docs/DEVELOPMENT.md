@@ -8,7 +8,7 @@
 
 - **ビルドステップ不要**: Vanilla JavaScript (ES2020+)、ソースをそのまま Chrome に読み込む
 - **ソースコード**: `ai-prompt-broadcaster/` ディレクトリ
-- **ルート package.json**: 開発用（構文チェック・ESLint）のみ
+- **ルート package.json**: 開発用（ESLint）のみ
 
 ### Chrome 拡張の読み込み
 
@@ -21,8 +21,7 @@
 
 ```bash
 # 静的解析（リポジトリルート）
-pnpm check   # 構文チェック + ESLint
-pnpm lint    # ESLint のみ
+pnpm lint
 
 # E2E テスト
 cd e2e && pnpm test
