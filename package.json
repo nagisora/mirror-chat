@@ -2,6 +2,11 @@
   "name": "mirror-chat",
   "private": true,
   "scripts": {
-    "check": "bash scripts/check-syntax.sh"
+    "lint": "eslint ai-prompt-broadcaster"
+  },
+  "devDependencies": {
+    "@eslint/js": "10",
+    "eslint": "^10.1.0",
+    "globals": "^17.4.0"
   }
 }
