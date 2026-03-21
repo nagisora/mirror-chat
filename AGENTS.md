@@ -46,7 +46,7 @@ mkdir -p /home/ubuntu/ObsidianVault
 
 ### テスト・リント
 
-- 構文・静的解析: リポジトリルートで `pnpm check`（`node -c` による構文チェックに加え [ESLint](https://eslint.org/) recommended）。Lint のみは `pnpm lint`
+- 静的解析: リポジトリルートで `pnpm check` または `pnpm lint` で [ESLint](https://eslint.org/) recommended（構文・未使用変数・論理エラー等を検出）
 - E2E テスト: `e2e/` ディレクトリで Playwright による自動テストを実行可能。`cd e2e && pnpm test`
 - ログイン済み Chrome プロファイルを使うと送信〜回答取得までフルにテスト可能。未ログインの場合は基本動作のみ検証。
 - Cloud Agent でフルテストする場合: プロファイルを `e2e/chrome-profile.zip` に配置し、`cd e2e && pnpm test:with-profile:headed` を実行。手順は `docs/E2E_LOGIN_PROFILE.md` を参照。
