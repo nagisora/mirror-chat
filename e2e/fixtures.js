@@ -117,11 +117,11 @@ const test = base.extend({
   context: async ({}, use) => {
     // Chrome拡張は headed モード必須。CI では xvfb で仮想ディスプレイを使用
     const context = await chromium.launchPersistentContext(userDataDir, launchOptionsForProfile());
-    // ログイン済みプロファイルはセッション復元でタブ・ウィンドウが増えることがあり、
-    // 画面上は about:blank のままに見えて Playwright が操作しているタブとずれる。先に閉じておく。
+    // セッション復元でタブが増えたときは先頭以外を閉じる（全閉じは Chrome が新規タブを開けなくなる）
     if (hasCustomUserData()) {
-      for (const p of context.pages()) {
-        await p.close().catch(() => {});
+      const pages = context.pages();
+      for (let i = 1; i < pages.length; i++) {
+        await pages[i].close().catch(() => {});
       }
     }
     await use(context);
@@ -150,6 +150,14 @@ const test = base.extend({
       );
     }
     await use(id);
+  },
+
+  // extensionId（service worker 登録）を先に解決してから newPage する
+  page: async ({ context, extensionId }, use) => {
+    void extensionId;
+    const page = await context.newPage();
+    await use(page);
+    await page.close();
   },
 });
 

@@ -111,7 +111,7 @@ MIRRORCHAT_E2E_FULL=1 pnpm exec playwright test --grep "フルフロー"
 
 ### ブラウザは開くがずっと `about:blank` のまま／テストがすぐ失敗する
 
-- Chrome が **前回のセッションを復元**して別ウィンドウ・別タブを開いていると、目に見えているタブと Playwright が操作しているタブが一致しないことがあります。E2E ではカスタムプロファイル時に起動直後の既存タブを閉じる処理を入れています（`e2e/fixtures.js`）。
+- Chrome が **前回のセッションを復元**して別ウィンドウ・別タブを開いていると、目に見えているタブと Playwright が操作しているタブが一致しないことがあります。E2E ではカスタムプロファイル時に **先頭のタブ以外**を閉じます（**全タブを閉じると** Chrome が新規タブを開けず `Failed to open a new tab` になります。`e2e/fixtures.js`）。
 - それでも不安定な場合は、手元の Chrome で当該プロファイルを開き、不要なウィンドウを閉じてから **正常終了**してから zip を取り直すと改善することがあります。
 
 ### Playwright が Chrome を起動できない（`EACCES` / `distribution 'chrome' is not found`）
