@@ -28,6 +28,9 @@ const aiTabIds = {};
 const queue = [];
 let processing = false;
 
+/** E2E 用: 直近の回答取得タスクの results スナップショット（本番 UI からは参照しない） */
+let lastTaskResultsForE2e = null;
+
 /** ストレージから aiTabIds を復元し、存在するタブのみ aiTabIds に反映する（Service Worker 再起動後の復帰用） */
 async function loadAiTabIds() {
   if (Object.keys(aiTabIds).length > 0) return;
@@ -506,6 +509,13 @@ async function runTask(task) {
     }
   }
 
+  lastTaskResultsForE2e = results.map((r) => ({
+    ai: r.ai,
+    name: r.name,
+    markdown: r.markdown || "",
+    error: r.error
+  }));
+
   const hasAnyMarkdown = results.some((r) => r.markdown && r.markdown.trim().length > 0);
   const failed = results.filter((r) => r.error).map((r) => r.name);
   let saveResult = { ok: false };
@@ -660,6 +670,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "MIRRORCHAT_CLOSE_TABS") {
     closeAITabs();
     sendResponse({ ok: true });
+    return false;
+  }
+
+  if (msg.type === "MIRRORCHAT_E2E_GET_LAST_RESULTS") {
+    sendResponse({ ok: true, results: lastTaskResultsForE2e });
     return false;
   }
 

@@ -27,6 +27,16 @@ pnpm test:ui
 
 各AIサービス（ChatGPT, Claude, Gemini, Grok）にログイン済みの Chrome プロファイルを使うと、送信〜回答取得まで一通りテストできます。
 
+- **4 サービスすべて**に依存します。1 つでもログイン切れ・取得失敗・応答に `TESTOK` が含まれない場合はテストが赤になります（メンテ・フレークの温床になりやすい点に注意）。
+- 検証の主眼は **拡張のポップアップ UI（送信・インジケータ・ステータス）と取得テキスト**までです。Obsidian Vault 内の実ファイルを REST API で読む検証は含みません。
+
+フルフローだけ実行する例:
+
+```bash
+cd e2e
+MIRRORCHAT_E2E_FULL=1 pnpm exec playwright test --grep "フルフロー"
+```
+
 ### ローカル（人間が実行）
 
 1. Obsidian + Local REST API を起動し、拡張機能の Options で URL / API キーを設定しておく（保存まで完了させる）

@@ -83,6 +83,13 @@ pnpm run test:with-profile
 | `MIRRORCHAT_E2E_AFTER_OPEN_WAIT_MS` | タブオープン後の待ち（既定 30000） |
 | `MIRRORCHAT_E2E_POST_SEND_WAIT_MS` | 送信完了から「回答を取得」クリックまでの待ち（既定 180000） |
 
+フルフロー用スペックのみ実行する例:
+
+```bash
+cd e2e
+MIRRORCHAT_E2E_FULL=1 pnpm exec playwright test --grep "フルフロー"
+```
+
 ---
 
 ## トラブルシューティング
