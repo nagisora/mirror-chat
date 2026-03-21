@@ -82,6 +82,10 @@ pnpm run test:with-profile
 | `MIRRORCHAT_E2E_REQUIRE_OBSIDIAN` | 既定 `1`。`0` にすると Obsidian 保存の成否は問わず、4サイトとも回答取得（インジケータ `done`）までを検証（Computer Use で Obsidian 未起動のとき向け） |
 | `MIRRORCHAT_E2E_AFTER_OPEN_WAIT_MS` | タブオープン後の待ち（既定 30000） |
 | `MIRRORCHAT_E2E_POST_SEND_WAIT_MS` | 送信完了から「回答を取得」クリックまでの待ち（既定 180000） |
+| `MIRRORCHAT_E2E_BROWSER_CHANNEL` | `chromium` で Playwright 同梱 Chromium に固定（プロファイル Cookie が読めないことがある）。未指定時はシステムの Chrome 実行ファイルを探索して `executablePath` で起動 |
+| `MIRRORCHAT_CHROME_EXECUTABLE` | Google Chrome のバイナリパス（探索に失敗する環境向け） |
+
+`test-with-profile.sh` は `MIRRORCHAT_USER_DATA_DIR` を zip 展開先に設定するため、**システムの Google Chrome** で起動する前提です（`/usr/local/bin/google-chrome` 等を自動検出）。`pnpm exec playwright install chrome` は任意です。
 
 フルフロー用スペックのみ実行する例:
 
@@ -104,6 +108,12 @@ MIRRORCHAT_E2E_FULL=1 pnpm exec playwright test --grep "フルフロー"
 
 - セッションの有効期限が切れている可能性があります
 - ローカルで再度ログインし、プロファイルを再エクスポートしてください
+
+### Playwright が Chrome を起動できない（`EACCES` / `distribution 'chrome' is not found`）
+
+- **Chromium だけでは Cookie が読めない**: 上記のとおり、カスタムプロファイル時は Google Chrome 本体の起動を試みます。
+- **`spawn ... EACCES`**: パス上の `google-chrome` に実行権限がないことがあります。`chmod +x` するか、`MIRRORCHAT_CHROME_EXECUTABLE` に実バイナリ（例: `/opt/google/chrome/chrome`）を指定してください。
+- **`Chromium distribution 'chrome' is not found`**: `pnpm exec playwright install chrome`（管理者権限が要る場合あり）か、システムに Google Chrome をインストールし、探索リストに載るパスに置いてください。
 
 ---
 

@@ -8,6 +8,8 @@ Playwright を使った Chrome 拡張機能の自動テストです。
 cd e2e
 pnpm install
 pnpm exec playwright install chromium
+# ログイン済みプロファイル（chrome-profile.zip 等）でフルテストする場合は Google Chrome も入れる
+pnpm exec playwright install chrome
 ```
 
 ## 実行方法
@@ -40,14 +42,23 @@ MIRRORCHAT_E2E_FULL=1 pnpm exec playwright test --grep "フルフロー"
 ### ローカル（人間が実行）
 
 1. Obsidian + Local REST API を起動し、拡張機能の Options で URL / API キーを設定しておく（保存まで完了させる）
-2. ログイン済みの User Data を指定して **フルスイート** を有効化:
+2. **`e2e/chrome-profile.zip` を使う場合（推奨）** — zip を展開して `MIRRORCHAT_USER_DATA_DIR` に載せ、`MIRRORCHAT_E2E_FULL=1` を付けるのを **`pnpm test:with-profile:headed` が代行**します。次のように実行してください（zip のパスは固定で `e2e/chrome-profile.zip`）。
+
+```bash
+cd e2e
+pnpm test:with-profile:headed
+```
+
+3. **自分の PC の Chrome プロファイルを直接指す場合** — 例: いつも使っている Google Chrome の User Data ルート（`Default` の親ディレクトリ。Linux では多くの環境で `~/.config/google-chrome`）。
 
 ```bash
 cd e2e
 MIRRORCHAT_E2E_FULL=1 MIRRORCHAT_USER_DATA_DIR="$HOME/.config/google-chrome" pnpm test:headed
 ```
 
-`pnpm test:with-profile:headed` は `e2e/chrome-profile.zip` を展開し、上記の `MIRRORCHAT_E2E_FULL=1` を自動で付与します。
+**注意:** `MIRRORCHAT_E2E_FULL=1` だけ付けて `MIRRORCHAT_USER_DATA_DIR` を付けないと、Playwright 用の空の `.playwright-user-data` で起動し、**各 AI にはログインした状態になりません**。zip を置いただけでは使われません。必ず `test-with-profile` か、上記のように User Data を明示してください。
+
+また、ログイン済みプロファイルは **Google Chrome 用**に作られていることが多いです。E2E ではカスタム `MIRRORCHAT_USER_DATA_DIR` 指定時は既定で **システムの Google Chrome** を起動します（よくあるパスを順に探索し、見つかった実行ファイルを `executablePath` に渡します）。`pnpm exec playwright install chrome` が使えない環境でも、手元の Chrome があれば動きます。実行ファイルを明示する場合は `MIRRORCHAT_CHROME_EXECUTABLE=/path/to/google-chrome` を付与してください。同梱 Chromium のみで試す場合は `MIRRORCHAT_E2E_BROWSER_CHANNEL=chromium`（Cookie が読めず未ログインになることがあります）。
 
 ### Cursor Cloud Agents（Computer Use 等）
 
