@@ -298,7 +298,7 @@ async function focusMirrorChatTab() {
           });
         }
       });
-    } catch (e) {
+    } catch {
       // ここでの失敗は致命的でないので無視
       resolve();
     }
