@@ -81,7 +81,7 @@ mirror-chat/
 ## ドキュメント
 
 - [利用手順（詳細）](docs/CHROME_EXTENSION_USAGE.md)
-- [開発者向け](AGENTS.md)
+- [開発環境ガイド](docs/DEVELOPMENT.md)
 
 ## 開発
 
