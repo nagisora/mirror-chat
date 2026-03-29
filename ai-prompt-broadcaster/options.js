@@ -24,6 +24,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         container.querySelector(".answer-selector").value = cfg.answerContainerSelector || "";
         const copyEl = container.querySelector(".copy-selector");
         if (copyEl) copyEl.value = cfg.copyButtonSelector || "";
+        const doneEl = container.querySelector(".done-selector");
+        if (doneEl) doneEl.value = cfg.doneCheckSelector || "";
+        const submitMethodEl = container.querySelector(".submit-method-selector");
+        if (submitMethodEl) {
+          submitMethodEl.value = cfg.submitMethod || "clickSubmitOrEnter";
+        }
+        const inputSuccessFallbackEl = container.querySelector(".input-success-fallback-selector");
+        if (inputSuccessFallbackEl) inputSuccessFallbackEl.value = cfg.inputSuccessFallback || "";
       });
   }
 
@@ -47,7 +55,15 @@ document.addEventListener("DOMContentLoaded", async () => {
           answerContainerSelector: container.querySelector(".answer-selector").value.trim()
         };
         const copyVal = (container.querySelector(".copy-selector")?.value || "").trim();
+        const doneVal = (container.querySelector(".done-selector")?.value || "").trim();
+        const submitMethodVal = (container.querySelector(".submit-method-selector")?.value || "").trim();
+        const inputSuccessFallbackVal = (container.querySelector(".input-success-fallback-selector")?.value || "").trim();
         if (copyVal) config.copyButtonSelector = copyVal;
+        config.doneCheckSelector = doneVal;
+        if (submitMethodVal) config.submitMethod = submitMethodVal;
+        if (inputSuccessFallbackVal) {
+          config.inputSuccessFallback = inputSuccessFallbackVal;
+        }
         partial.aiConfigs[aiKey] = config;
       });
 
