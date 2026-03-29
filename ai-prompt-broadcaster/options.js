@@ -65,6 +65,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (submitMethodVal) config.submitMethod = submitMethodVal;
         if (inputSuccessFallbackVal) {
           config.inputSuccessFallback = inputSuccessFallbackVal;
+        } else {
+          // 空欄保存時は上書き設定を削除して既定値に戻す
+          config.inputSuccessFallback = null;
         }
         partial.aiConfigs[aiKey] = config;
       });

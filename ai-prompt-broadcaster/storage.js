@@ -18,21 +18,25 @@
     aiConfigs: cloneAiConfigs(constants.AI_CONFIG_DEFAULTS)
   };
 
-  async function getSettings() {
+  async function getStoredSettingsRaw() {
     return new Promise((resolve) => {
       chrome.storage.sync.get(STORAGE_KEY, (items) => {
-        const stored = items[STORAGE_KEY] || {};
-        const merged = mergeDeep(defaultSettings, stored);
-        resolve(merged);
+        resolve(items[STORAGE_KEY] || {});
       });
     });
   }
 
+  async function getSettings() {
+    const stored = await getStoredSettingsRaw();
+    return mergeDeep(defaultSettings, stored);
+  }
+
   async function saveSettings(partial) {
-    const current = await getSettings();
-    const next = mergeDeep(current, partial);
+    const stored = await getStoredSettingsRaw();
+    const nextStored = mergeForStorage(stored, partial);
+    const resolved = mergeDeep(defaultSettings, nextStored);
     return new Promise((resolve) => {
-      chrome.storage.sync.set({ [STORAGE_KEY]: next }, () => resolve(next));
+      chrome.storage.sync.set({ [STORAGE_KEY]: nextStored }, () => resolve(resolved));
     });
   }
 
@@ -43,6 +47,33 @@
       const srcVal = source[key];
       if (srcVal && typeof srcVal === "object" && !Array.isArray(srcVal)) {
         result[key] = mergeDeep(result[key] || {}, srcVal);
+      } else {
+        result[key] = srcVal;
+      }
+    });
+    return result;
+  }
+
+  function mergeForStorage(target, source) {
+    if (typeof source !== "object" || source === null) return target;
+    const result = Array.isArray(target) ? [...target] : { ...(target || {}) };
+    Object.keys(source).forEach((key) => {
+      const srcVal = source[key];
+      if (srcVal === null) {
+        delete result[key];
+        return;
+      }
+      if (srcVal && typeof srcVal === "object" && !Array.isArray(srcVal)) {
+        const currentChild =
+          result[key] && typeof result[key] === "object" && !Array.isArray(result[key])
+            ? result[key]
+            : {};
+        const mergedChild = mergeForStorage(currentChild, srcVal);
+        if (Object.keys(mergedChild).length === 0) {
+          delete result[key];
+        } else {
+          result[key] = mergedChild;
+        }
       } else {
         result[key] = srcVal;
       }
