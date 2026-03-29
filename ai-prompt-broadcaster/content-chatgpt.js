@@ -1,13 +1,5 @@
 (function () {
-  const defaultConfig = {
-    inputSelector: "div#prompt-textarea, div.ProseMirror[contenteditable='true']",
-    submitButtonSelector: "button#composer-submit-button, button[data-testid='send-button']",
-    answerContainerSelector: "main div[data-testid='conversation-turns'], main",
-    copyButtonSelector: "button[aria-label='Copy'], [data-testid*='copy']",
-    doneCheckSelector: "button[data-testid='stop-button']",
-    submitMethod: "clickSubmitOrEnter",
-    inputSuccessFallback: "chatgpt"
-  };
+  const defaultConfig = window.MirrorChatConstants?.AI_CONFIG_DEFAULTS?.chatgpt;
   if (window._mirrorChatListener_chatgpt) return;
   window._mirrorChatListener_chatgpt = true;
   chrome.runtime.onMessage.addListener(
