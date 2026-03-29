@@ -174,123 +174,134 @@ async function ensureOffscreenDocument() {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.type === MESSAGE_TYPES.READ_CLIPBOARD) {
-    ensureOffscreenDocument()
-      .then(() => {
-        chrome.runtime.sendMessage(
-          { type: MESSAGE_TYPES.READ_CLIPBOARD_INTERNAL },
-          (response) => {
-            if (chrome.runtime.lastError) {
-              sendResponse({ ok: false, error: chrome.runtime.lastError.message });
-              return;
+  const handlers = {
+    [MESSAGE_TYPES.READ_CLIPBOARD]: () => {
+      ensureOffscreenDocument()
+        .then(() => {
+          chrome.runtime.sendMessage(
+            { type: MESSAGE_TYPES.READ_CLIPBOARD_INTERNAL },
+            (response) => {
+              if (chrome.runtime.lastError) {
+                sendResponse({ ok: false, error: chrome.runtime.lastError.message });
+                return;
+              }
+              if (response?.ok) {
+                sendResponse({ ok: true, text: response.text ?? "" });
+              } else {
+                sendResponse({ ok: false, error: response?.error ?? "Unknown" });
+              }
             }
-            if (response?.ok) {
-              sendResponse({ ok: true, text: response.text ?? "" });
-            } else {
-              sendResponse({ ok: false, error: response?.error ?? "Unknown" });
+          );
+        })
+        .catch((e) => {
+          sendResponse({ ok: false, error: e?.message ?? String(e) });
+        });
+      return true;
+    },
+
+    [MESSAGE_TYPES.OPEN_TABS]: () => {
+      self.MirrorChatStorage.getSettings()
+        .then((settings) => tabManager.openAITabs(settings))
+        .then((tabs) => {
+          sendResponse({ ok: true, openTabs: tabs });
+        })
+        .catch((e) => {
+          console.error("MirrorChat openAITabs error:", e);
+          sendResponse({ ok: false, error: e?.message || String(e) });
+        });
+      return true;
+    },
+
+    [MESSAGE_TYPES.CLOSE_TABS]: () => {
+      tabManager.closeAITabs();
+      sendResponse({ ok: true });
+      return false;
+    },
+
+    [MESSAGE_TYPES.GET_TAB_STATUS]: () => {
+      (async () => {
+        const validTabs = await tabManager.getValidOpenTabs();
+        sendResponse({ openTabs: validTabs });
+      })();
+      return true;
+    },
+
+    [MESSAGE_TYPES.SEND]: () => {
+      // 送信フェーズ: 各AIタブにプロンプトを設定して送信のみ行う（回答の取得は後続の FETCH フェーズ）
+      (async () => {
+        try {
+          await tabManager.loadAiTabIds();
+          const prompt = msg.prompt;
+          // 現在の質問をローカルストレージに保持（ポップアップ再表示時などに利用）
+          const isFollowUp = !!msg.isFollowUp;
+          await new Promise((resolve) =>
+            chrome.storage.local.set(
+              { [CURRENT_TASK_KEY]: { prompt, createdAt: Date.now(), isFollowUp } },
+              resolve
+            )
+          );
+
+          const settings = await self.MirrorChatStorage.getSettings();
+          const sendPromises = AI_KEYS.map((aiKey) => {
+            if (!tabManager.getTabId(aiKey)) {
+              const cfg = settings.aiConfigs?.[aiKey];
+              aiCommunication.notifyAIStatus(aiKey, "error");
+              return Promise.resolve({
+                ai: aiKey,
+                name: cfg?.name || aiKey,
+                ok: false,
+                error: "タブが開いていません"
+              });
             }
-          }
-        );
-      })
-      .catch((e) => {
-        sendResponse({ ok: false, error: e?.message ?? String(e) });
-      });
-    return true;
-  }
+            // 送信は並列で実行（フォーカス不要）
+            return aiCommunication.sendPromptToAI(aiKey, prompt, settings);
+          });
+          await Promise.all(sendPromises);
 
-  if (msg.type === MESSAGE_TYPES.OPEN_TABS) {
-    self.MirrorChatStorage.getSettings()
-      .then((settings) => tabManager.openAITabs(settings))
-      .then((tabs) => {
-        sendResponse({ ok: true, openTabs: tabs });
-      })
-      .catch((e) => {
-        console.error("MirrorChat openAITabs error:", e);
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      });
-    return true;
-  }
+          aiCommunication.sendStatusText("送信が完了しました。各AIの回答が出揃ったら「回答を取得」を押してください。");
+          sendResponse({ ok: true });
+        } catch (e) {
+          console.error("MirrorChat send error:", e);
+          sendResponse({ ok: false, error: e?.message || String(e) });
+        }
+      })();
+      return true;
+    },
 
-  if (msg.type === MESSAGE_TYPES.CLOSE_TABS) {
-    tabManager.closeAITabs();
-    sendResponse({ ok: true });
+    [MESSAGE_TYPES.FETCH]: () => {
+      // 回答取得フェーズ: 現在の質問に対してタブを順番にフォーカスし、回答を収集してObsidianに保存
+      chrome.storage.local.get(CURRENT_TASK_KEY, async (data) => {
+        const current = data?.[CURRENT_TASK_KEY];
+        if (!current || !current.prompt) {
+          sendResponse({ ok: false, error: "取得対象の質問が見つかりませんでした" });
+          return;
+        }
+        await tabManager.loadAiTabIds();
+        taskQueue.enqueue({ prompt: current.prompt, isFollowUp: !!current.isFollowUp });
+        if (!taskQueue.isProcessing()) processNext();
+        sendResponse({ ok: true });
+      });
+      return true;
+    },
+
+    [MESSAGE_TYPES.RETRY]: () => {
+      retryStore.drainFailedItems().then((items) => {
+        items.forEach((it) => {
+          const task = { prompt: it.question, retryPayload: it };
+          if (it.isFollowUp) task.isFollowUp = true;
+          if (it.basePath) task.basePath = it.basePath;
+          taskQueue.enqueue(task);
+        });
+        if (!taskQueue.isProcessing() && items.length > 0) processNext();
+        sendResponse({ ok: true });
+      });
+      return true;
+    }
+  };
+
+  const handler = handlers[msg.type];
+  if (!handler) {
     return false;
   }
-
-  if (msg.type === MESSAGE_TYPES.GET_TAB_STATUS) {
-    (async () => {
-      const validTabs = await tabManager.getValidOpenTabs();
-      sendResponse({ openTabs: validTabs });
-    })();
-    return true;
-  }
-
-  if (msg.type === MESSAGE_TYPES.SEND) {
-    // 送信フェーズ: 各AIタブにプロンプトを設定して送信のみ行う（回答の取得は後続の FETCH フェーズ）
-    (async () => {
-      try {
-        await tabManager.loadAiTabIds();
-        const prompt = msg.prompt;
-        // 現在の質問をローカルストレージに保持（ポップアップ再表示時などに利用）
-        const isFollowUp = !!msg.isFollowUp;
-        await new Promise((resolve) =>
-          chrome.storage.local.set(
-            { [CURRENT_TASK_KEY]: { prompt, createdAt: Date.now(), isFollowUp } },
-            resolve
-          )
-        );
-
-        const settings = await self.MirrorChatStorage.getSettings();
-        const sendPromises = AI_KEYS.map((aiKey) => {
-          if (!tabManager.getTabId(aiKey)) {
-            const cfg = settings.aiConfigs?.[aiKey];
-            aiCommunication.notifyAIStatus(aiKey, "error");
-            return Promise.resolve({
-              ai: aiKey,
-              name: cfg?.name || aiKey,
-              ok: false,
-              error: "タブが開いていません"
-            });
-          }
-          // 送信は並列で実行（フォーカス不要）
-          return aiCommunication.sendPromptToAI(aiKey, prompt, settings);
-        });
-        await Promise.all(sendPromises);
-
-        aiCommunication.sendStatusText("送信が完了しました。各AIの回答が出揃ったら「回答を取得」を押してください。");
-        sendResponse({ ok: true });
-      } catch (e) {
-        console.error("MirrorChat send error:", e);
-        sendResponse({ ok: false, error: e?.message || String(e) });
-      }
-    })();
-    return true;
-  } else if (msg.type === MESSAGE_TYPES.FETCH) {
-    // 回答取得フェーズ: 現在の質問に対してタブを順番にフォーカスし、回答を収集してObsidianに保存
-    chrome.storage.local.get(CURRENT_TASK_KEY, async (data) => {
-      const current = data?.[CURRENT_TASK_KEY];
-      if (!current || !current.prompt) {
-        sendResponse({ ok: false, error: "取得対象の質問が見つかりませんでした" });
-        return;
-      }
-      await tabManager.loadAiTabIds();
-      taskQueue.enqueue({ prompt: current.prompt, isFollowUp: !!current.isFollowUp });
-      if (!taskQueue.isProcessing()) processNext();
-      sendResponse({ ok: true });
-    });
-    return true;
-  } else if (msg.type === MESSAGE_TYPES.RETRY) {
-    retryStore.drainFailedItems().then((items) => {
-      items.forEach((it) => {
-        const task = { prompt: it.question, retryPayload: it };
-        if (it.isFollowUp) task.isFollowUp = true;
-        if (it.basePath) task.basePath = it.basePath;
-        taskQueue.enqueue(task);
-      });
-      if (!taskQueue.isProcessing() && items.length > 0) processNext();
-      sendResponse({ ok: true });
-    });
-    return true;
-  }
-  return false;
+  return handler(msg, sender, sendResponse);
 });

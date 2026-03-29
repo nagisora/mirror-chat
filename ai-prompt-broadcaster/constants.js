@@ -97,10 +97,46 @@
   };
 
   const CONTENT_SCRIPTS = {
-    chatgpt: { files: ["constants.js", "content-utils.js", "content-base.js", "content-chatgpt.js"] },
-    claude: { files: ["constants.js", "content-utils.js", "content-base.js", "content-claude.js"] },
-    gemini: { files: ["constants.js", "content-utils.js", "content-base.js", "content-gemini.js"] },
-    grok: { files: ["constants.js", "content-utils.js", "content-base.js", "content-grok.js"] }
+    chatgpt: {
+      files: [
+        "constants.js",
+        "content-dom-utils.js",
+        "content-input-utils.js",
+        "content-response-utils.js",
+        "content-base.js",
+        "content-chatgpt.js"
+      ]
+    },
+    claude: {
+      files: [
+        "constants.js",
+        "content-dom-utils.js",
+        "content-input-utils.js",
+        "content-response-utils.js",
+        "content-base.js",
+        "content-claude.js"
+      ]
+    },
+    gemini: {
+      files: [
+        "constants.js",
+        "content-dom-utils.js",
+        "content-input-utils.js",
+        "content-response-utils.js",
+        "content-base.js",
+        "content-gemini.js"
+      ]
+    },
+    grok: {
+      files: [
+        "constants.js",
+        "content-dom-utils.js",
+        "content-input-utils.js",
+        "content-response-utils.js",
+        "content-base.js",
+        "content-grok.js"
+      ]
+    }
   };
 
   const target = typeof window !== "undefined" ? window : self;
