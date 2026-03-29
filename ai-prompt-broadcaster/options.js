@@ -6,6 +6,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const status = document.getElementById("status");
 
   const storage = window.MirrorChatStorage;
+  const MESSAGE_TYPES = window.MirrorChatConstants?.MESSAGE_TYPES || {};
+  const MSG_RETRY = MESSAGE_TYPES.RETRY || "MIRRORCHAT_RETRY";
 
   async function restore() {
     const settings = await storage.getSettings();
@@ -87,7 +89,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   document.getElementById("retry-button").addEventListener("click", () => {
-    chrome.runtime.sendMessage({ type: "MIRRORCHAT_RETRY" });
+    chrome.runtime.sendMessage({ type: MSG_RETRY });
     status.textContent = "再送信を開始しました。";
     setTimeout(() => { status.textContent = ""; }, 3000);
   });

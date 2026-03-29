@@ -30,8 +30,19 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const constants = window.MirrorChatConstants || {};
   const AI_KEYS = constants.AI_KEYS ?? ["chatgpt", "claude", "gemini", "grok"];
+  const MESSAGE_TYPES = constants.MESSAGE_TYPES || {};
   const currentTaskKey = constants.STORAGE_KEYS?.CURRENT_TASK ?? "mirrorchatCurrentTask";
   const failedItemsKey = constants.STORAGE_KEYS?.FAILED_ITEMS ?? "mirrorchatFailedItems";
+
+  const MSG_GET_TAB_STATUS = MESSAGE_TYPES.GET_TAB_STATUS || "MIRRORCHAT_GET_TAB_STATUS";
+  const MSG_OPEN_TABS = MESSAGE_TYPES.OPEN_TABS || "MIRRORCHAT_OPEN_TABS";
+  const MSG_CLOSE_TABS = MESSAGE_TYPES.CLOSE_TABS || "MIRRORCHAT_CLOSE_TABS";
+  const MSG_SEND = MESSAGE_TYPES.SEND || "MIRRORCHAT_SEND";
+  const MSG_FETCH = MESSAGE_TYPES.FETCH || "MIRRORCHAT_FETCH";
+  const MSG_RETRY = MESSAGE_TYPES.RETRY || "MIRRORCHAT_RETRY";
+  const MSG_STATUS = MESSAGE_TYPES.STATUS || "MIRRORCHAT_STATUS";
+  const MSG_AI_STATUS = MESSAGE_TYPES.AI_STATUS || "MIRRORCHAT_AI_STATUS";
+  const MSG_DONE = MESSAGE_TYPES.DONE || "MIRRORCHAT_DONE";
 
   const indicators = {};
   AI_KEYS.forEach((key) => {
@@ -104,7 +115,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function refreshTabStatus() {
-    chrome.runtime.sendMessage({ type: "MIRRORCHAT_GET_TAB_STATUS" }, async (resp) => {
+    chrome.runtime.sendMessage({ type: MSG_GET_TAB_STATUS }, async (resp) => {
       if (chrome.runtime.lastError) return;
       const current = await readLocalStorage(currentTaskKey);
       setState({
@@ -117,7 +128,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   openTabsButton.addEventListener("click", () => {
     setState({ busyAction: "opening", statusText: "AIサイトを開いています..." });
-    chrome.runtime.sendMessage({ type: "MIRRORCHAT_OPEN_TABS" }, (resp) => {
+    chrome.runtime.sendMessage({ type: MSG_OPEN_TABS }, (resp) => {
       if (chrome.runtime.lastError) {
         setState({
           busyAction: "",
@@ -143,7 +154,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   closeTabsButton.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ type: "MIRRORCHAT_CLOSE_TABS" }, () => {
+    chrome.runtime.sendMessage({ type: MSG_CLOSE_TABS }, () => {
       if (chrome.runtime.lastError) return;
       setState({
         openTabs: {},
@@ -171,7 +182,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         : "送信中...各AIに質問を送っています。回答生成完了後に「回答を取得」を押してください。"
     });
 
-    chrome.runtime.sendMessage({ type: "MIRRORCHAT_SEND", prompt: text, isFollowUp }, (resp) => {
+    chrome.runtime.sendMessage({ type: MSG_SEND, prompt: text, isFollowUp }, (resp) => {
       if (chrome.runtime.lastError) {
         setState({
           busyAction: "",
@@ -206,7 +217,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       statusText: "回答を取得中です。タブを順番にフォーカスしてテキストを収集します..."
     });
 
-    chrome.runtime.sendMessage({ type: "MIRRORCHAT_FETCH" }, (resp) => {
+    chrome.runtime.sendMessage({ type: MSG_FETCH }, (resp) => {
       if (chrome.runtime.lastError) {
         setState({
           busyAction: "",
@@ -232,7 +243,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   function doResave() {
     setState({ busyAction: "retrying", statusText: "再保存中..." });
-    chrome.runtime.sendMessage({ type: "MIRRORCHAT_RETRY" }, async () => {
+    chrome.runtime.sendMessage({ type: MSG_RETRY }, async () => {
       if (chrome.runtime.lastError) {
         setState({
           busyAction: "",
@@ -252,11 +263,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   resaveButton.addEventListener("click", doResave);
 
   chrome.runtime.onMessage.addListener((msg) => {
-    if (msg.type === "MIRRORCHAT_STATUS") {
+    if (msg.type === MSG_STATUS) {
       setState({ statusText: msg.text || "" });
       return;
     }
-    if (msg.type === "MIRRORCHAT_AI_STATUS") {
+    if (msg.type === MSG_AI_STATUS) {
       setState({
         aiStates: {
           ...appState.aiStates,
@@ -265,7 +276,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
       return;
     }
-    if (msg.type === "MIRRORCHAT_DONE") {
+    if (msg.type === MSG_DONE) {
       setState({
         busyAction: "",
         allowCollect: !!msg.saveFailed

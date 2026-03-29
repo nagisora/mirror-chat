@@ -12,6 +12,10 @@ var RESPONSE_WAIT_INITIAL_MS = RESPONSE_WAIT_INITIAL_MS || 15000;
 var POLL_INTERVAL_MS = POLL_INTERVAL_MS || 500;
 var COPY_TIMEOUT_MS = COPY_TIMEOUT_MS || 5500;
 var CLIPBOARD_READ_ATTEMPTS_MS = CLIPBOARD_READ_ATTEMPTS_MS || [400, 900, 1600, 2500, 4000];
+var MIRRORCHAT_MESSAGE_TYPES = MIRRORCHAT_MESSAGE_TYPES || (window.MirrorChatConstants?.MESSAGE_TYPES || {});
+var MIRRORCHAT_MSG_READ_CLIPBOARD = MIRRORCHAT_MSG_READ_CLIPBOARD ||
+  MIRRORCHAT_MESSAGE_TYPES.READ_CLIPBOARD ||
+  "MIRRORCHAT_READ_CLIPBOARD";
 
 function htmlToMarkdown(container) {
   if (!container) return "";
@@ -406,7 +410,7 @@ async function copyResponseViaClipboard(copyButtonSelector) {
     // コピーは非同期で完了する場合があるため、複数タイミングで試行する
     const readOffscreenClipboard = () =>
       new Promise((r) => {
-        chrome.runtime.sendMessage({ type: "MIRRORCHAT_READ_CLIPBOARD" }, (response) => {
+        chrome.runtime.sendMessage({ type: MIRRORCHAT_MSG_READ_CLIPBOARD }, (response) => {
           if (chrome.runtime.lastError) {
             r({ ok: false, error: chrome.runtime.lastError.message });
           } else {

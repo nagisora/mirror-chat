@@ -6,7 +6,10 @@
  * ダイアログなしで読み取り可能。
  */
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg.type !== "MIRRORCHAT_READ_CLIPBOARD_INTERNAL") return false;
+  const MESSAGE_TYPES = self.MirrorChatConstants?.MESSAGE_TYPES || {};
+  const MSG_READ_CLIPBOARD_INTERNAL =
+    MESSAGE_TYPES.READ_CLIPBOARD_INTERNAL || "MIRRORCHAT_READ_CLIPBOARD_INTERNAL";
+  if (msg.type !== MSG_READ_CLIPBOARD_INTERNAL) return false;
 
   (async () => {
     try {
