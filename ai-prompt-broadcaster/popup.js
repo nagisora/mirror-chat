@@ -45,14 +45,25 @@ document.addEventListener("DOMContentLoaded", async () => {
   const MSG_DONE = MESSAGE_TYPES.DONE || "MIRRORCHAT_DONE";
 
   const indicators = {};
+  const aiCheckboxes = {};
   AI_KEYS.forEach((key) => {
     indicators[key] = document.getElementById("ind-" + key);
+    aiCheckboxes[key] = document.querySelector('.ai-checkbox[data-ai="' + key + '"]');
   });
+
+  function getDefaultEnabledAIs() {
+    return Object.fromEntries(AI_KEYS.map((key) => [key, true]));
+  }
+
+  function getSelectedAIs(enabledAIs) {
+    return AI_KEYS.filter((key) => !!enabledAIs[key]);
+  }
 
   const appState = {
     statusText: "",
     openTabs: {},
     aiStates: Object.fromEntries(AI_KEYS.map((key) => [key, ""])),
+    enabledAIs: getDefaultEnabledAIs(),
     hasPendingQuestion: false,
     allowCollect: false,
     hasFailedItems: false,
@@ -77,14 +88,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   function render() {
     const hasOpenTabs = Object.keys(appState.openTabs || {}).length > 0;
+    const selectedAIs = getSelectedAIs(appState.enabledAIs);
 
     AI_KEYS.forEach((key) => {
       setIndicator(key, getAiIndicatorState(key));
+      if (aiCheckboxes[key]) aiCheckboxes[key].checked = !!appState.enabledAIs[key];
     });
 
     openTabsButton.disabled = hasOpenTabs || appState.busyAction === "opening";
     closeTabsButton.disabled = !hasOpenTabs;
-    sendButton.disabled = !hasOpenTabs || appState.hasPendingQuestion;
+    sendButton.disabled = !hasOpenTabs || appState.hasPendingQuestion || selectedAIs.length === 0;
     collectButton.disabled = !hasOpenTabs || !appState.allowCollect || appState.busyAction === "collecting";
     retrySection.hidden = !appState.hasFailedItems;
     retryButton.disabled = !appState.hasFailedItems || appState.busyAction === "retrying";
@@ -127,8 +140,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   openTabsButton.addEventListener("click", () => {
+    const enabledAIs = getSelectedAIs(appState.enabledAIs);
+    if (enabledAIs.length === 0) {
+      setState({ statusText: "使用する AI を1つ以上選択してください。" });
+      return;
+    }
+
     setState({ busyAction: "opening", statusText: "AIサイトを開いています..." });
-    chrome.runtime.sendMessage({ type: MSG_OPEN_TABS }, (resp) => {
+    chrome.runtime.sendMessage({ type: MSG_OPEN_TABS, enabledAIs }, (resp) => {
       if (chrome.runtime.lastError) {
         setState({
           busyAction: "",
@@ -154,12 +173,15 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   closeTabsButton.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ type: MSG_CLOSE_TABS }, () => {
+    const enabledAIs = getSelectedAIs(appState.enabledAIs);
+    if (enabledAIs.length === 0) {
+      setState({ statusText: "使用する AI を1つ以上選択してください。" });
+      return;
+    }
+    chrome.runtime.sendMessage({ type: MSG_CLOSE_TABS, enabledAIs }, () => {
       if (chrome.runtime.lastError) return;
-      setState({
-        openTabs: {},
-        statusText: "AIサイトのタブを閉じました。"
-      });
+      refreshTabStatus();
+      setState({ statusText: "選択したAIサイトのタブを閉じました。" });
     });
   });
 
@@ -170,8 +192,16 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
+    const enabledAIs = getSelectedAIs(appState.enabledAIs);
+    if (enabledAIs.length === 0) {
+      setState({ statusText: "使用する AI を1つ以上選択してください。" });
+      return;
+    }
+
     const isFollowUp = followUpCheckbox.checked;
-    const nextAiStates = Object.fromEntries(AI_KEYS.map((key) => [key, "sending"]));
+    const nextAiStates = Object.fromEntries(
+      AI_KEYS.map((key) => [key, enabledAIs.includes(key) ? "sending" : ""])
+    );
     setState({
       busyAction: "sending",
       hasPendingQuestion: true,
@@ -182,7 +212,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         : "送信中...各AIに質問を送っています。回答生成完了後に「回答を取得」を押してください。"
     });
 
-    chrome.runtime.sendMessage({ type: MSG_SEND, prompt: text, isFollowUp }, (resp) => {
+    chrome.runtime.sendMessage({ type: MSG_SEND, prompt: text, isFollowUp, enabledAIs }, (resp) => {
       if (chrome.runtime.lastError) {
         setState({
           busyAction: "",
@@ -262,6 +292,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   retryButton.addEventListener("click", doResave);
   resaveButton.addEventListener("click", doResave);
 
+  AI_KEYS.forEach((key) => {
+    const checkbox = aiCheckboxes[key];
+    if (!checkbox) return;
+    checkbox.addEventListener("change", () => {
+      const nextEnabledAIs = {
+        ...appState.enabledAIs,
+        [key]: !!checkbox.checked
+      };
+      setState({ enabledAIs: nextEnabledAIs });
+    });
+  });
+
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === MSG_STATUS) {
       setState({ statusText: msg.text || "" });
@@ -287,12 +329,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   await syncRetryState();
+  setState({ enabledAIs: getDefaultEnabledAIs() });
   refreshTabStatus();
+  promptInput.value = "";
+  followUpCheckbox.checked = false;
 
   const current = await syncTaskState();
   if (current?.prompt) {
-    promptInput.value = current.prompt;
-    followUpCheckbox.checked = !!current.isFollowUp;
     setState({
       statusText: "前回の質問の回答が未取得です。「回答を取得」を押してObsidianに保存してください。"
     });

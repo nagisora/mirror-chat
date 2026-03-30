@@ -33,10 +33,17 @@ const obsidianStorage = self.MirrorChatObsidianStorage;
 const tabManager = self.MirrorChatTabManager;
 const aiCommunication = self.MirrorChatAICommunication;
 
+function resolveEnabledAIs(rawEnabledAIs) {
+  if (typeof rawEnabledAIs === "undefined") return [...AI_KEYS];
+  if (!Array.isArray(rawEnabledAIs)) return [];
+  return AI_KEYS.filter((key) => rawEnabledAIs.includes(key));
+}
+
 tabManager.setStatusNotifier(aiCommunication.notifyAIStatus);
 
 async function runTask(task) {
   const settings = await self.MirrorChatStorage.getSettings();
+  const enabledAIs = resolveEnabledAIs(task.enabledAIs);
   let results;
 
   if (task.retryPayload?.results) {
@@ -44,7 +51,7 @@ async function runTask(task) {
   } else {
     // 回答取得フェーズでは、クリップボード利用の都合上タブを順番にフォーカスして処理する
     results = [];
-    for (const aiKey of AI_KEYS) {
+    for (const aiKey of enabledAIs) {
       const cfg = settings.aiConfigs?.[aiKey];
       if (!tabManager.getTabId(aiKey)) {
         results.push({
@@ -103,7 +110,7 @@ async function runTask(task) {
     if (failed.length > 0) {
       showNotification("MirrorChat: 一部失敗", `取得失敗: ${failed.join(", ")}。Obsidianには保存済みです。`);
     } else {
-      const aiCount = AI_KEYS.length;
+      const aiCount = results.length;
       showNotification("MirrorChat: 完了", `${aiCount}つのAIから回答を取得し、Obsidianに保存しました。`);
     }
   }
@@ -201,7 +208,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     [MESSAGE_TYPES.OPEN_TABS]: () => {
       self.MirrorChatStorage.getSettings()
-        .then((settings) => tabManager.openAITabs(settings))
+        .then((settings) => tabManager.openAITabs(settings, msg.enabledAIs))
         .then((tabs) => {
           sendResponse({ ok: true, openTabs: tabs });
         })
@@ -213,9 +220,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     },
 
     [MESSAGE_TYPES.CLOSE_TABS]: () => {
-      tabManager.closeAITabs();
-      sendResponse({ ok: true });
-      return false;
+      (async () => {
+        tabManager.closeAITabs(msg.enabledAIs);
+        const validTabs = await tabManager.getValidOpenTabs();
+        sendResponse({ ok: true, openTabs: validTabs });
+      })();
+      return true;
     },
 
     [MESSAGE_TYPES.GET_TAB_STATUS]: () => {
@@ -232,17 +242,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         try {
           await tabManager.loadAiTabIds();
           const prompt = msg.prompt;
+          const enabledAIs = resolveEnabledAIs(msg.enabledAIs);
+          if (enabledAIs.length === 0) {
+            sendResponse({ ok: false, error: "使用する AI を1つ以上選択してください。" });
+            return;
+          }
           // 現在の質問をローカルストレージに保持（ポップアップ再表示時などに利用）
           const isFollowUp = !!msg.isFollowUp;
           await new Promise((resolve) =>
             chrome.storage.local.set(
-              { [CURRENT_TASK_KEY]: { prompt, createdAt: Date.now(), isFollowUp } },
+              { [CURRENT_TASK_KEY]: { prompt, createdAt: Date.now(), isFollowUp, enabledAIs } },
               resolve
             )
           );
 
           const settings = await self.MirrorChatStorage.getSettings();
-          const sendPromises = AI_KEYS.map((aiKey) => {
+          const sendPromises = enabledAIs.map((aiKey) => {
             if (!tabManager.getTabId(aiKey)) {
               const cfg = settings.aiConfigs?.[aiKey];
               aiCommunication.notifyAIStatus(aiKey, "error");
@@ -277,7 +292,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           return;
         }
         await tabManager.loadAiTabIds();
-        taskQueue.enqueue({ prompt: current.prompt, isFollowUp: !!current.isFollowUp });
+        taskQueue.enqueue({
+          prompt: current.prompt,
+          isFollowUp: !!current.isFollowUp,
+          enabledAIs: resolveEnabledAIs(current.enabledAIs)
+        });
         if (!taskQueue.isProcessing()) processNext();
         sendResponse({ ok: true });
       });

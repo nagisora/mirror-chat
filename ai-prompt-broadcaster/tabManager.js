@@ -40,9 +40,16 @@
     return aiTabIds[aiKey] || null;
   }
 
-  async function openAITabs(settings) {
+  function resolveTargetAIs(rawEnabledAIs) {
+    if (typeof rawEnabledAIs === "undefined") return [...AI_KEYS];
+    if (!Array.isArray(rawEnabledAIs)) return [];
+    return AI_KEYS.filter((key) => rawEnabledAIs.includes(key));
+  }
+
+  async function openAITabs(settings, enabledAIs) {
     await loadAiTabIds();
-    for (const aiKey of AI_KEYS) {
+    const targetAIs = resolveTargetAIs(enabledAIs);
+    for (const aiKey of targetAIs) {
       const cfg = settings.aiConfigs?.[aiKey];
       const url = cfg?.url || "";
       if (!url) continue;
@@ -83,8 +90,9 @@
     return { ...aiTabIds };
   }
 
-  function closeAITabs() {
-    for (const aiKey of AI_KEYS) {
+  function closeAITabs(enabledAIs) {
+    const targetAIs = resolveTargetAIs(enabledAIs);
+    for (const aiKey of targetAIs) {
       if (aiTabIds[aiKey]) {
         chrome.tabs.remove(aiTabIds[aiKey], () => {
           void chrome.runtime.lastError;

@@ -78,6 +78,10 @@ label {
   color: #444;
 }
 
+.tab-item .ai-checkbox {
+  margin: 0;
+}
+
 textarea {
   width: 100%;
   box-sizing: border-box;

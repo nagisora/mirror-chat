@@ -8,6 +8,7 @@
   const STORAGE_KEYS = {
     FAILED_ITEMS: "mirrorchatFailedItems",
     CURRENT_TASK: "mirrorchatCurrentTask",
+    ENABLED_AIS: "mirrorchatEnabledAIs",
     SETTINGS: "mirrorchatSettings",
     AI_TAB_IDS: "mirrorchatAiTabIds",
     FOLDER_SEQ: "mirrorchatFolderSeq",

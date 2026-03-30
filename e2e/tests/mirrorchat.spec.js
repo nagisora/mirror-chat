@@ -18,6 +18,26 @@ test.describe("MirrorChat 拡張機能", () => {
     await expect(page.locator("#prompt-input")).toBeVisible();
     await expect(page.locator("#open-tabs-button")).toBeVisible();
     await expect(page.locator("#collect-button")).toBeVisible();
+    const aiCheckboxes = page.locator(".ai-checkbox");
+    await expect(aiCheckboxes).toHaveCount(4);
+    await expect(aiCheckboxes.nth(0)).toBeChecked();
+    await expect(aiCheckboxes.nth(1)).toBeChecked();
+    await expect(aiCheckboxes.nth(2)).toBeChecked();
+    await expect(aiCheckboxes.nth(3)).toBeChecked();
+  });
+
+  test("使用するAIを全て外すとサイトを開けない", async ({ page, extensionId }) => {
+    await page.goto(`chrome-extension://${extensionId}/popup.html?standalone=1`);
+
+    const checkboxes = page.locator(".ai-checkbox");
+    for (let i = 0; i < 4; i++) {
+      await checkboxes.nth(i).uncheck();
+    }
+
+    await page.locator("#open-tabs-button").click();
+    await expect(page.locator("#status")).toContainText("1つ以上選択", {
+      timeout: 5_000,
+    });
   });
 
   test("「サイトを開く」で4つのAIタブが開く", async ({ context, page, extensionId }) => {
@@ -276,5 +296,35 @@ test.describe("MirrorChat 拡張機能", () => {
 
     // タブ状態が復帰して送信ボタンが有効であること
     await expect(page.locator("#send-button")).toBeEnabled({ timeout: 10_000 });
+  });
+
+  test("未取得タスクがあっても起動時に入力欄はクリアされる", async ({ page, extensionId }) => {
+    await page.goto(`chrome-extension://${extensionId}/popup.html?standalone=1`);
+    await page.locator("#open-tabs-button").click();
+    await expect(page.locator("#send-button")).toBeEnabled({ timeout: 15_000 });
+
+    await page.evaluate(() => {
+      return new Promise((resolve) => {
+        chrome.storage.local.set(
+          {
+            mirrorchatCurrentTask: {
+              prompt: "前回の質問テキスト",
+              createdAt: Date.now(),
+              isFollowUp: true,
+              enabledAIs: ["chatgpt", "claude"]
+            }
+          },
+          resolve
+        );
+      });
+    });
+
+    await page.goto(`chrome-extension://${extensionId}/popup.html?standalone=1`);
+    await expect(page.locator("#prompt-input")).toHaveValue("");
+    await expect(page.locator("#follow-up-checkbox")).not.toBeChecked();
+    await expect(page.locator("#status")).toContainText("前回の質問の回答が未取得", {
+      timeout: 5_000,
+    });
+    await expect(page.locator("#collect-button")).toBeEnabled({ timeout: 5_000 });
   });
 });
