@@ -169,6 +169,34 @@ test.describe("MirrorChat 拡張機能", () => {
     });
   });
 
+  test("高度なAI設定を保存・復元できる", async ({ page, extensionId }) => {
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+
+    const chatgpt = page.locator(".ai-config[data-ai='chatgpt']");
+    const claude = page.locator(".ai-config[data-ai='claude']");
+
+    await chatgpt.locator("details.advanced-settings > summary").click();
+    await claude.locator("details.advanced-settings > summary").click();
+
+    await chatgpt.locator(".done-selector").fill("button[data-testid='stop-button'], button[aria-label='Stop']");
+    await chatgpt.locator(".submit-method-selector").selectOption("pressEnterToSubmit");
+    await claude.locator(".input-success-fallback-selector").fill("chatgpt");
+
+    await page.locator("#save-button").click();
+    await expect(page.locator("#status")).toContainText("保存しました", {
+      timeout: 5_000,
+    });
+
+    await page.reload();
+
+    await chatgpt.locator("details.advanced-settings > summary").click();
+    await claude.locator("details.advanced-settings > summary").click();
+
+    await expect(chatgpt.locator(".done-selector")).toHaveValue("button[data-testid='stop-button'], button[aria-label='Stop']");
+    await expect(chatgpt.locator(".submit-method-selector")).toHaveValue("pressEnterToSubmit");
+    await expect(claude.locator(".input-success-fallback-selector")).toHaveValue("chatgpt");
+  });
+
   test("質問が空の場合にエラーメッセージが表示される", async ({ page, extensionId }) => {
     await page.goto(`chrome-extension://${extensionId}/popup.html?standalone=1`);
 

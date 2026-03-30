@@ -46,6 +46,24 @@
             コピーボタンセレクタ（応答取得用）
             <input class="copy-selector" type="text" placeholder="例: [data-testid='action-bar-copy']" />
           </label>
+          <details class="advanced-settings">
+            <summary>高度な設定</summary>
+            <label>
+              応答完了判定セレクタ（doneCheckSelector）
+              <input class="done-selector" type="text" placeholder="例: button[data-testid='stop-button']" />
+            </label>
+            <label>
+              送信方式
+              <select class="submit-method-selector">
+                <option value="clickSubmitOrEnter">clickSubmitOrEnter</option>
+                <option value="pressEnterToSubmit">pressEnterToSubmit</option>
+              </select>
+            </label>
+            <label>
+              入力フォールバック設定（inputSuccessFallback）
+              <input class="input-success-fallback-selector" type="text" placeholder="例: chatgpt" />
+            </label>
+          </details>
         </div>
 
         <div class="ai-config" data-ai="claude">
@@ -66,6 +84,24 @@
             コピーボタンセレクタ（応答取得用）
             <input class="copy-selector" type="text" placeholder="例: [data-testid='action-bar-copy']" />
           </label>
+          <details class="advanced-settings">
+            <summary>高度な設定</summary>
+            <label>
+              応答完了判定セレクタ（doneCheckSelector）
+              <input class="done-selector" type="text" placeholder="例: [data-testid='stop-button']" />
+            </label>
+            <label>
+              送信方式
+              <select class="submit-method-selector">
+                <option value="clickSubmitOrEnter">clickSubmitOrEnter</option>
+                <option value="pressEnterToSubmit">pressEnterToSubmit</option>
+              </select>
+            </label>
+            <label>
+              入力フォールバック設定（inputSuccessFallback）
+              <input class="input-success-fallback-selector" type="text" placeholder="通常は空欄" />
+            </label>
+          </details>
         </div>
 
         <div class="ai-config" data-ai="gemini">
@@ -86,6 +122,24 @@
             コピーボタンセレクタ（応答取得用）
             <input class="copy-selector" type="text" placeholder="例: [data-testid='action-bar-copy']" />
           </label>
+          <details class="advanced-settings">
+            <summary>高度な設定</summary>
+            <label>
+              応答完了判定セレクタ（doneCheckSelector）
+              <input class="done-selector" type="text" placeholder="例: button[aria-label='Stop']" />
+            </label>
+            <label>
+              送信方式
+              <select class="submit-method-selector">
+                <option value="clickSubmitOrEnter">clickSubmitOrEnter</option>
+                <option value="pressEnterToSubmit">pressEnterToSubmit</option>
+              </select>
+            </label>
+            <label>
+              入力フォールバック設定（inputSuccessFallback）
+              <input class="input-success-fallback-selector" type="text" placeholder="通常は空欄" />
+            </label>
+          </details>
         </div>
 
         <div class="ai-config" data-ai="grok">
@@ -106,6 +160,24 @@
             コピーボタンセレクタ（応答取得用）
             <input class="copy-selector" type="text" placeholder="例: [data-testid='action-bar-copy']" />
           </label>
+          <details class="advanced-settings">
+            <summary>高度な設定</summary>
+            <label>
+              応答完了判定セレクタ（doneCheckSelector）
+              <input class="done-selector" type="text" placeholder="例: button[aria-label='Cancel']" />
+            </label>
+            <label>
+              送信方式
+              <select class="submit-method-selector">
+                <option value="clickSubmitOrEnter">clickSubmitOrEnter</option>
+                <option value="pressEnterToSubmit">pressEnterToSubmit</option>
+              </select>
+            </label>
+            <label>
+              入力フォールバック設定（inputSuccessFallback）
+              <input class="input-success-fallback-selector" type="text" placeholder="通常は空欄" />
+            </label>
+          </details>
         </div>
       </section>
 

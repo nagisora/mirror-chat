@@ -6,6 +6,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const status = document.getElementById("status");
 
   const storage = window.MirrorChatStorage;
+  const MESSAGE_TYPES = window.MirrorChatConstants?.MESSAGE_TYPES || {};
+  const MSG_RETRY = MESSAGE_TYPES.RETRY || "MIRRORCHAT_RETRY";
 
   async function restore() {
     const settings = await storage.getSettings();
@@ -24,6 +26,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         container.querySelector(".answer-selector").value = cfg.answerContainerSelector || "";
         const copyEl = container.querySelector(".copy-selector");
         if (copyEl) copyEl.value = cfg.copyButtonSelector || "";
+        const doneEl = container.querySelector(".done-selector");
+        if (doneEl) doneEl.value = cfg.doneCheckSelector || "";
+        const submitMethodEl = container.querySelector(".submit-method-selector");
+        if (submitMethodEl) {
+          submitMethodEl.value = cfg.submitMethod || "clickSubmitOrEnter";
+        }
+        const inputSuccessFallbackEl = container.querySelector(".input-success-fallback-selector");
+        if (inputSuccessFallbackEl) inputSuccessFallbackEl.value = cfg.inputSuccessFallback || "";
       });
   }
 
@@ -47,7 +57,18 @@ document.addEventListener("DOMContentLoaded", async () => {
           answerContainerSelector: container.querySelector(".answer-selector").value.trim()
         };
         const copyVal = (container.querySelector(".copy-selector")?.value || "").trim();
+        const doneVal = (container.querySelector(".done-selector")?.value || "").trim();
+        const submitMethodVal = (container.querySelector(".submit-method-selector")?.value || "").trim();
+        const inputSuccessFallbackVal = (container.querySelector(".input-success-fallback-selector")?.value || "").trim();
         if (copyVal) config.copyButtonSelector = copyVal;
+        config.doneCheckSelector = doneVal;
+        if (submitMethodVal) config.submitMethod = submitMethodVal;
+        if (inputSuccessFallbackVal) {
+          config.inputSuccessFallback = inputSuccessFallbackVal;
+        } else {
+          // 空欄保存時は上書き設定を削除して既定値に戻す
+          config.inputSuccessFallback = null;
+        }
         partial.aiConfigs[aiKey] = config;
       });
 
@@ -71,7 +92,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   document.getElementById("retry-button").addEventListener("click", () => {
-    chrome.runtime.sendMessage({ type: "MIRRORCHAT_RETRY" });
+    chrome.runtime.sendMessage({ type: MSG_RETRY });
     status.textContent = "再送信を開始しました。";
     setTimeout(() => { status.textContent = ""; }, 3000);
   });

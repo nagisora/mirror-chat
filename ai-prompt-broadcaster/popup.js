@@ -14,7 +14,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
   } catch (e) {
-    // ここでの失敗は致命的ではないので、通常のポップアップとして続行する
     console.warn("MirrorChat: standalone モードへの切り替えに失敗しました:", e);
   }
 
@@ -29,140 +28,234 @@ document.addEventListener("DOMContentLoaded", async () => {
   const retryButton = document.getElementById("retry-button");
   const resaveButton = document.getElementById("resave-button");
 
-  // constants.js が先に読み込まれる前提。フォールバックは念のため。
-  const AI_KEYS = window.MirrorChatConstants?.AI_KEYS ?? ["chatgpt", "claude", "gemini", "grok"];
+  const constants = window.MirrorChatConstants || {};
+  const AI_KEYS = constants.AI_KEYS ?? ["chatgpt", "claude", "gemini", "grok"];
+  const MESSAGE_TYPES = constants.MESSAGE_TYPES || {};
+  const currentTaskKey = constants.STORAGE_KEYS?.CURRENT_TASK ?? "mirrorchatCurrentTask";
+  const failedItemsKey = constants.STORAGE_KEYS?.FAILED_ITEMS ?? "mirrorchatFailedItems";
+
+  const MSG_GET_TAB_STATUS = MESSAGE_TYPES.GET_TAB_STATUS || "MIRRORCHAT_GET_TAB_STATUS";
+  const MSG_OPEN_TABS = MESSAGE_TYPES.OPEN_TABS || "MIRRORCHAT_OPEN_TABS";
+  const MSG_CLOSE_TABS = MESSAGE_TYPES.CLOSE_TABS || "MIRRORCHAT_CLOSE_TABS";
+  const MSG_SEND = MESSAGE_TYPES.SEND || "MIRRORCHAT_SEND";
+  const MSG_FETCH = MESSAGE_TYPES.FETCH || "MIRRORCHAT_FETCH";
+  const MSG_RETRY = MESSAGE_TYPES.RETRY || "MIRRORCHAT_RETRY";
+  const MSG_STATUS = MESSAGE_TYPES.STATUS || "MIRRORCHAT_STATUS";
+  const MSG_AI_STATUS = MESSAGE_TYPES.AI_STATUS || "MIRRORCHAT_AI_STATUS";
+  const MSG_DONE = MESSAGE_TYPES.DONE || "MIRRORCHAT_DONE";
+
   const indicators = {};
   AI_KEYS.forEach((key) => {
     indicators[key] = document.getElementById("ind-" + key);
   });
 
-  function setIndicator(aiKey, state) {
+  const appState = {
+    statusText: "",
+    openTabs: {},
+    aiStates: Object.fromEntries(AI_KEYS.map((key) => [key, ""])),
+    hasPendingQuestion: false,
+    allowCollect: false,
+    hasFailedItems: false,
+    busyAction: ""
+  };
+
+  function setIndicator(aiKey, stateName) {
     const el = indicators[aiKey];
     if (!el) return;
     el.className = "indicator";
-    if (state) el.classList.add(state);
+    if (stateName) el.classList.add(stateName);
   }
 
-  function updateTabUI(openTabs, hasPendingQuestion = false) {
-    const hasOpen = openTabs && Object.keys(openTabs).length > 0;
+  function setState(patch) {
+    Object.assign(appState, patch);
+    render();
+  }
+
+  function getAiIndicatorState(aiKey) {
+    return appState.aiStates[aiKey] || (appState.openTabs[aiKey] ? "open" : "");
+  }
+
+  function render() {
+    const hasOpenTabs = Object.keys(appState.openTabs || {}).length > 0;
+
     AI_KEYS.forEach((key) => {
-      setIndicator(key, openTabs && openTabs[key] ? "open" : "");
+      setIndicator(key, getAiIndicatorState(key));
     });
-    closeTabsButton.disabled = !hasOpen;
-    openTabsButton.disabled = hasOpen;
-    if (hasPendingQuestion) {
-      sendButton.disabled = true;
-      collectButton.disabled = !hasOpen;
-    } else {
-      sendButton.disabled = !hasOpen;
-      collectButton.disabled = true;
-    }
+
+    openTabsButton.disabled = hasOpenTabs || appState.busyAction === "opening";
+    closeTabsButton.disabled = !hasOpenTabs;
+    sendButton.disabled = !hasOpenTabs || appState.hasPendingQuestion;
+    collectButton.disabled = !hasOpenTabs || !appState.allowCollect || appState.busyAction === "collecting";
+    retrySection.hidden = !appState.hasFailedItems;
+    retryButton.disabled = !appState.hasFailedItems || appState.busyAction === "retrying";
+    resaveButton.disabled = !appState.hasFailedItems || appState.busyAction === "retrying";
+    status.textContent = appState.statusText;
+  }
+
+  async function readLocalStorage(key) {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(key, (data) => {
+        resolve(data?.[key]);
+      });
+    });
+  }
+
+  async function syncTaskState() {
+    const current = await readLocalStorage(currentTaskKey);
+    setState({
+      hasPendingQuestion: !!current?.prompt,
+      allowCollect: !!current?.prompt
+    });
+    return current;
+  }
+
+  async function syncRetryState() {
+    const items = (await readLocalStorage(failedItemsKey)) || [];
+    setState({ hasFailedItems: items.length > 0 });
   }
 
   function refreshTabStatus() {
-    const currentTaskKey = window.MirrorChatConstants?.STORAGE_KEYS?.CURRENT_TASK ?? "mirrorchatCurrentTask";
-    chrome.runtime.sendMessage({ type: "MIRRORCHAT_GET_TAB_STATUS" }, (resp) => {
+    chrome.runtime.sendMessage({ type: MSG_GET_TAB_STATUS }, async (resp) => {
       if (chrome.runtime.lastError) return;
-      chrome.storage.local.get(currentTaskKey, (data) => {
-        const current = data?.[currentTaskKey];
-        const hasPendingQuestion = !!(current?.prompt);
-        updateTabUI(resp?.openTabs, hasPendingQuestion);
+      const current = await readLocalStorage(currentTaskKey);
+      setState({
+        openTabs: resp?.openTabs || {},
+        hasPendingQuestion: !!current?.prompt,
+        allowCollect: !!current?.prompt
       });
     });
   }
 
   openTabsButton.addEventListener("click", () => {
-    openTabsButton.disabled = true;
-    status.textContent = "AIサイトを開いています...";
-    chrome.runtime.sendMessage({ type: "MIRRORCHAT_OPEN_TABS" }, (resp) => {
+    setState({ busyAction: "opening", statusText: "AIサイトを開いています..." });
+    chrome.runtime.sendMessage({ type: MSG_OPEN_TABS }, (resp) => {
       if (chrome.runtime.lastError) {
-        status.textContent = "タブを開けませんでした: " + chrome.runtime.lastError.message;
-        openTabsButton.disabled = false;
+        setState({
+          busyAction: "",
+          statusText: "タブを開けませんでした: " + chrome.runtime.lastError.message
+        });
         return;
       }
       if (!resp || !resp.ok) {
-        status.textContent = "タブを開けませんでした: " + (resp?.error || "不明なエラー");
-        openTabsButton.disabled = false;
+        setState({
+          busyAction: "",
+          statusText: "タブを開けませんでした: " + (resp?.error || "不明なエラー")
+        });
         return;
       }
-      status.textContent = "AIサイトを開きました。ログイン等を済ませてから質問を送信してください。";
-      updateTabUI(resp?.openTabs);
+      setState({
+        busyAction: "",
+        openTabs: resp?.openTabs || {},
+        hasPendingQuestion: false,
+        allowCollect: false,
+        statusText: "AIサイトを開きました。ログイン等を済ませてから質問を送信してください。"
+      });
     });
   });
 
   closeTabsButton.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ type: "MIRRORCHAT_CLOSE_TABS" }, () => {
+    chrome.runtime.sendMessage({ type: MSG_CLOSE_TABS }, () => {
       if (chrome.runtime.lastError) return;
-      status.textContent = "AIサイトのタブを閉じました。";
-      updateTabUI(null);
+      setState({
+        openTabs: {},
+        statusText: "AIサイトのタブを閉じました。"
+      });
     });
   });
 
-  sendButton.addEventListener("click", async () => {
+  sendButton.addEventListener("click", () => {
     const text = promptInput.value.trim();
     if (!text) {
-      status.textContent = "質問を入力してください。";
+      setState({ statusText: "質問を入力してください。" });
       return;
     }
+
     const isFollowUp = followUpCheckbox.checked;
-    if (isFollowUp) {
-      status.textContent = "続きの質問を送信中...各AIの既存会話に追加されます。回答生成完了後に「回答を取得」を押してください。";
-    } else {
-      status.textContent = "送信中...各AIに質問を送っています。回答生成完了後に「回答を取得」を押してください。";
-    }
-    // 一度送信した質問が処理中の間は、新しい送信は行わない
-    sendButton.disabled = true;
-    collectButton.disabled = false;
+    const nextAiStates = Object.fromEntries(AI_KEYS.map((key) => [key, "sending"]));
+    setState({
+      busyAction: "sending",
+      hasPendingQuestion: true,
+      allowCollect: true,
+      aiStates: nextAiStates,
+      statusText: isFollowUp
+        ? "続きの質問を送信中...各AIの既存会話に追加されます。回答生成完了後に「回答を取得」を押してください。"
+        : "送信中...各AIに質問を送っています。回答生成完了後に「回答を取得」を押してください。"
+    });
 
-    AI_KEYS.forEach((key) => setIndicator(key, "sending"));
-
-    chrome.runtime.sendMessage({ type: "MIRRORCHAT_SEND", prompt: text, isFollowUp }, (resp) => {
+    chrome.runtime.sendMessage({ type: MSG_SEND, prompt: text, isFollowUp }, (resp) => {
       if (chrome.runtime.lastError) {
-        status.textContent = "送信に失敗しました: " + chrome.runtime.lastError.message;
-        sendButton.disabled = false;
-        collectButton.disabled = true;
+        setState({
+          busyAction: "",
+          hasPendingQuestion: false,
+          allowCollect: false,
+          statusText: "送信に失敗しました: " + chrome.runtime.lastError.message
+        });
+        refreshTabStatus();
         return;
       }
       if (!resp || !resp.ok) {
-        status.textContent = "送信に失敗しました: " + (resp?.error || "不明なエラー");
-        sendButton.disabled = false;
-        collectButton.disabled = true;
+        setState({
+          busyAction: "",
+          hasPendingQuestion: false,
+          allowCollect: false,
+          statusText: "送信に失敗しました: " + (resp?.error || "不明なエラー")
+        });
+        refreshTabStatus();
         return;
       }
-      status.textContent = "送信が完了しました。各AIの回答が出揃ったら「回答を取得」を押してください。";
+      setState({
+        busyAction: "",
+        statusText: "送信が完了しました。各AIの回答が出揃ったら「回答を取得」を押してください。"
+      });
     });
   });
 
   collectButton.addEventListener("click", () => {
-    collectButton.disabled = true;
-    status.textContent = "回答を取得中です。タブを順番にフォーカスしてテキストを収集します...";
-    chrome.runtime.sendMessage({ type: "MIRRORCHAT_FETCH" }, (resp) => {
+    setState({
+      busyAction: "collecting",
+      allowCollect: false,
+      statusText: "回答を取得中です。タブを順番にフォーカスしてテキストを収集します..."
+    });
+
+    chrome.runtime.sendMessage({ type: MSG_FETCH }, (resp) => {
       if (chrome.runtime.lastError) {
-        status.textContent = "回答取得の開始に失敗しました: " + chrome.runtime.lastError.message;
-        collectButton.disabled = false;
+        setState({
+          busyAction: "",
+          allowCollect: true,
+          statusText: "回答取得の開始に失敗しました: " + chrome.runtime.lastError.message
+        });
         return;
       }
       if (!resp || !resp.ok) {
-        status.textContent = "回答取得の開始に失敗しました: " + (resp?.error || "不明なエラー");
-        collectButton.disabled = false;
+        setState({
+          busyAction: "",
+          allowCollect: true,
+          statusText: "回答取得の開始に失敗しました: " + (resp?.error || "不明なエラー")
+        });
         return;
       }
-      // 実際の取得完了は MIRRORCHAT_DONE で通知される
-      status.textContent = "回答取得を開始しました。バックグラウンドで順次処理されます。";
+      setState({
+        busyAction: "collecting",
+        statusText: "回答取得を開始しました。バックグラウンドで順次処理されます。"
+      });
     });
   });
 
   function doResave() {
-    resaveButton.disabled = true;
-    retryButton.disabled = true;
-    status.textContent = "再保存中...";
-    chrome.runtime.sendMessage({ type: "MIRRORCHAT_RETRY" }, () => {
+    setState({ busyAction: "retrying", statusText: "再保存中..." });
+    chrome.runtime.sendMessage({ type: MSG_RETRY }, async () => {
       if (chrome.runtime.lastError) {
-        status.textContent = "再保存に失敗しました: " + chrome.runtime.lastError.message;
+        setState({
+          busyAction: "",
+          statusText: "再保存に失敗しました: " + chrome.runtime.lastError.message
+        });
       } else {
-        status.textContent = "再保存を開始しました。";
+        setState({
+          busyAction: "",
+          statusText: "再保存を開始しました。"
+        });
       }
-      updateRetryVisibility();
+      await syncRetryState();
     });
   }
 
@@ -170,42 +263,40 @@ document.addEventListener("DOMContentLoaded", async () => {
   resaveButton.addEventListener("click", doResave);
 
   chrome.runtime.onMessage.addListener((msg) => {
-    if (msg.type === "MIRRORCHAT_STATUS") {
-      status.textContent = msg.text || "";
+    if (msg.type === MSG_STATUS) {
+      setState({ statusText: msg.text || "" });
+      return;
     }
-    if (msg.type === "MIRRORCHAT_AI_STATUS") {
-      setIndicator(msg.ai, msg.state);
+    if (msg.type === MSG_AI_STATUS) {
+      setState({
+        aiStates: {
+          ...appState.aiStates,
+          [msg.ai]: msg.state || ""
+        }
+      });
+      return;
     }
-    if (msg.type === "MIRRORCHAT_DONE") {
-      updateRetryVisibility();
-      sendButton.disabled = false;
-      // 保存失敗時は「回答を取得」を有効のままにして再試行可能にする
-      collectButton.disabled = !msg.saveFailed;
+    if (msg.type === MSG_DONE) {
+      setState({
+        busyAction: "",
+        allowCollect: !!msg.saveFailed
+      });
+      void syncRetryState();
       refreshTabStatus();
     }
   });
 
-  async function updateRetryVisibility() {
-    const key = window.MirrorChatConstants?.STORAGE_KEYS?.FAILED_ITEMS ?? "mirrorchatFailedItems";
-    const items = await new Promise((resolve) =>
-      chrome.storage.local.get(key, (x) => resolve(x[key] || []))
-    );
-    const hasFailedItems = items.length > 0;
-    retrySection.hidden = !hasFailedItems;
-    resaveButton.disabled = !hasFailedItems;
-  }
-
-  updateRetryVisibility();
+  await syncRetryState();
   refreshTabStatus();
 
-  // 直前の質問が未取得のまま残っている場合は、入力欄とステータスを復元する（ボタン状態は refreshTabStatus で設定）
-  const currentTaskKey = window.MirrorChatConstants?.STORAGE_KEYS?.CURRENT_TASK ?? "mirrorchatCurrentTask";
-  chrome.storage.local.get(currentTaskKey, (data) => {
-    const current = data?.[currentTaskKey];
-    if (current?.prompt) {
-      promptInput.value = current.prompt;
-      followUpCheckbox.checked = !!current.isFollowUp;
-      status.textContent = "前回の質問の回答が未取得です。「回答を取得」を押してObsidianに保存してください。";
-    }
-  });
+  const current = await syncTaskState();
+  if (current?.prompt) {
+    promptInput.value = current.prompt;
+    followUpCheckbox.checked = !!current.isFollowUp;
+    setState({
+      statusText: "前回の質問の回答が未取得です。「回答を取得」を押してObsidianに保存してください。"
+    });
+  } else {
+    render();
+  }
 });

@@ -50,6 +50,18 @@
 - **Obsidian 連携**: ベース URL、API トークン、保存ルートパス
 - **各 AI の DOM セレクタ**: 入力欄・送信ボタン・回答コンテナのセレクタ（UI 変更で動かなくなった場合に調整）
 
+## 内部構成（開発者向け）
+
+- `background.js`: メッセージ受信とタスク全体のオーケストレーション
+- `taskQueue.js`: 取得タスクのキュー管理
+- `tabManager.js`: AI タブの復元・開閉・状態確認
+- `aiCommunication.js`: AI タブへの送信と回答取得
+- `obsidianStorage.js`: Obsidian 保存とフォルダ/ファイル名の管理
+- `errorRetry.js`: 保存失敗データのローカル保持と再送用取り出し
+- `constants.js`: 共有定数（`MESSAGE_TYPES` / `AI_CONFIG_DEFAULTS` など）
+
+通信メッセージ種別は `constants.js` の `MESSAGE_TYPES` を通して参照します。
+
 ## 既知の制限
 
 - 各 AI サービスの UI（DOM 構造）は頻繁に変更されます。動かなくなった場合は Options 画面でセレクタを調整してください

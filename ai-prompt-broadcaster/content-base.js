@@ -12,10 +12,13 @@
     MAX: 3500,
     FALLBACK: 2500
   };
+  const MESSAGE_TYPES = window.MirrorChatConstants?.MESSAGE_TYPES || {};
+  const MSG_SEND_ONLY = MESSAGE_TYPES.SEND_ONLY || "MIRRORCHAT_SEND_ONLY";
+  const MSG_FETCH_ONLY = MESSAGE_TYPES.FETCH_ONLY || "MIRRORCHAT_FETCH_ONLY";
 
   function createMirrorChatHandler(defaultConfig) {
     return function (msg, _sender, sendResponse) {
-      if (msg.type !== "MIRRORCHAT_SEND_ONLY" && msg.type !== "MIRRORCHAT_FETCH_ONLY") return;
+      if (msg.type !== MSG_SEND_ONLY && msg.type !== MSG_FETCH_ONLY) return;
 
       const config = { ...defaultConfig, ...(msg.config || {}) };
       const inputSelector = config.inputSelector;
@@ -27,7 +30,7 @@
       const submitMethod = config.submitMethod || "clickSubmitOrEnter";
       const useInputSuccessFallback = config.inputSuccessFallback === "chatgpt";
 
-      if (msg.type === "MIRRORCHAT_SEND_ONLY") {
+      if (msg.type === MSG_SEND_ONLY) {
         (async () => {
           try {
             const utils = window.MirrorChatUtils || {};
@@ -96,7 +99,7 @@
         return true;
       }
 
-      if (msg.type === "MIRRORCHAT_FETCH_ONLY") {
+      if (msg.type === MSG_FETCH_ONLY) {
         (async () => {
           const utils = window.MirrorChatUtils || {};
           try {
