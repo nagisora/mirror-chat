@@ -12,7 +12,8 @@
     SETTINGS: "mirrorchatSettings",
     AI_TAB_IDS: "mirrorchatAiTabIds",
     FOLDER_SEQ: "mirrorchatFolderSeq",
-    LAST_SAVED_FOLDER: "mirrorchatLastSavedFolder"
+    LAST_SAVED_FOLDER: "mirrorchatLastSavedFolder",
+    QUESTION_FILE_SEQ: "mirrorchatQuestionFileSeq"
   };
 
   const TIMEOUT_MS = {
