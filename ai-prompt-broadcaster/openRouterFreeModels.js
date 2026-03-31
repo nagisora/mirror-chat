@@ -32,6 +32,15 @@
     return normalizeCandidateList(preferred ? [preferred, ...base] : base);
   }
 
+  function buildSelectOptions({ preferredModel, candidates } = {}) {
+    const ordered = buildCandidateList({ preferredModel, candidates });
+    const options = [{ value: "", label: "自動選択（最新の free 候補から選ぶ）" }];
+    for (const modelId of ordered) {
+      options.push({ value: modelId, label: modelId });
+    }
+    return options;
+  }
+
   function classifyOpenRouterError(error) {
     const message = error instanceof Error ? error.message : String(error || "");
     const lower = message.toLowerCase();
@@ -164,6 +173,7 @@
   self.MirrorChatOpenRouterFreeModels = {
     getDefaultDigestFreeModels,
     buildCandidateList,
+    buildSelectOptions,
     classifyOpenRouterError,
     refreshDigestFreeModels,
     tryCandidates

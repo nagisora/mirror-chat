@@ -198,7 +198,7 @@ test.describe("MirrorChat 拡張機能", () => {
     await page.locator("#openrouter-enable-digest").check();
     await page.locator("#openrouter-api-key").fill("sk-or-test");
     await page.locator("details.advanced-settings").nth(0).locator("summary").click();
-    await page.locator("#openrouter-preferred-model").fill("google/gemma-3-27b-it:free");
+    await page.locator("#openrouter-preferred-model").selectOption("google/gemma-3-27b-it:free");
 
     await page.locator("#save-button").click();
     await expect(page.locator("#status")).toContainText("保存しました", {

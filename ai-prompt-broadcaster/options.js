@@ -17,6 +17,21 @@ document.addEventListener("DOMContentLoaded", async () => {
   const MESSAGE_TYPES = window.MirrorChatConstants?.MESSAGE_TYPES || {};
   const MSG_RETRY = MESSAGE_TYPES.RETRY || "MIRRORCHAT_RETRY";
 
+  function populatePreferredModelOptions(settings) {
+    const options = openRouterFreeModels.buildSelectOptions({
+      preferredModel: settings?.openrouter?.preferredModel,
+      candidates: settings?.openrouter?.freeModelCandidatesOverride
+    });
+    openRouterPreferredModelInput.innerHTML = "";
+    options.forEach(({ value, label }) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      openRouterPreferredModelInput.appendChild(option);
+    });
+    openRouterPreferredModelInput.value = settings?.openrouter?.preferredModel || "";
+  }
+
   function formatRefreshMeta(openRouterSettings) {
     const candidates = Array.isArray(openRouterSettings?.freeModelCandidatesOverride)
       ? openRouterSettings.freeModelCandidatesOverride
@@ -43,7 +58,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     rootPathInput.value = settings.obsidian.rootPath || "";
     openRouterEnableDigestInput.checked = !!settings.openrouter?.enableDigest;
     openRouterApiKeyInput.value = settings.openrouter?.apiKey || "";
-    openRouterPreferredModelInput.value = settings.openrouter?.preferredModel || "";
+    populatePreferredModelOptions(settings);
     openRouterRefreshMeta.textContent = formatRefreshMeta(settings.openrouter);
     openRouterRefreshStatus.textContent = "";
 
@@ -151,6 +166,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
       });
       openRouterRefreshStatus.textContent = `free 候補を更新しました。${refreshed.candidates.length}件`;
+      populatePreferredModelOptions(nextSettings);
       openRouterRefreshMeta.textContent = formatRefreshMeta(nextSettings.openrouter);
     } catch (error) {
       openRouterRefreshStatus.textContent = `候補更新に失敗しました: ${error instanceof Error ? error.message : String(error)}`;

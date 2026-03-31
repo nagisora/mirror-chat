@@ -51,6 +51,19 @@ async function runDigestFollowUp({ question, results, settings, notePath }) {
     fetchImpl: fetch
   });
 
+  if (Array.isArray(digestResult.refreshedCandidates) && digestResult.refreshedCandidates.length > 0) {
+    try {
+      await self.MirrorChatStorage.saveSettings({
+        openrouter: {
+          freeModelCandidatesOverride: digestResult.refreshedCandidates,
+          lastRefreshAt: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      console.warn("MirrorChat: free候補の保存に失敗しました:", error);
+    }
+  }
+
   if (!digestResult.ok) {
     const failureText = digestService.buildDigestFailureText(digestResult.error);
     const updateFailure = await obsidianStorage.updateDigestInObsidian(notePath, failureText, settings);

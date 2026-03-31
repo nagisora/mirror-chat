@@ -10,6 +10,15 @@
     return `生成に失敗しました。\n\n${String(message || "Unknown error")}`;
   }
 
+  function buildDigestBody({ digestMarkdown, modelId, resultNames }) {
+    return [
+      `> 要約モデル: openrouter/${modelId}`,
+      `> 比較対象: ${resultNames.join(" / ")}`,
+      "",
+      digestMarkdown
+    ].join("\n");
+  }
+
   function buildDigestPrompt(question, results) {
     const answerBlocks = results
       .map(({ name, markdown, error }) => {
@@ -50,10 +59,24 @@
       return { ok: false, error: "OpenRouter API キーが設定されていません", attempts: [] };
     }
 
+    let resolvedCandidates = settings?.openrouter?.freeModelCandidatesOverride;
+    let refreshedCandidates = [];
+    try {
+      const catalog = await openRouterClient.fetchModelsCatalog({ apiKey, fetchImpl });
+      const refreshed = freeModelSelector.refreshDigestFreeModels({
+        catalog,
+        preferredModel: settings?.openrouter?.preferredModel
+      });
+      resolvedCandidates = refreshed.candidates;
+      refreshedCandidates = refreshed.candidates;
+    } catch {
+      // catalog refresh failure should not block digest generation; fall back to stored/default candidates
+    }
+
     const prompt = buildDigestPrompt(question, results);
     const selection = await freeModelSelector.tryCandidates({
       preferredModel: settings?.openrouter?.preferredModel,
-      candidates: settings?.openrouter?.freeModelCandidatesOverride,
+      candidates: resolvedCandidates,
       attempt: async (modelId) =>
         openRouterClient.requestChatCompletion({
           apiKey,
@@ -74,15 +97,21 @@
 
     return {
       ok: true,
-      digest: selection.value,
+      digest: buildDigestBody({
+        digestMarkdown: selection.value,
+        modelId: selection.modelId,
+        resultNames: results.map((result) => result.name)
+      }),
       modelId: selection.modelId,
-      attempts: selection.attempts
+      attempts: selection.attempts,
+      refreshedCandidates
     };
   }
 
   self.MirrorChatDigestService = {
     isDigestEnabled,
     buildDigestFailureText,
+    buildDigestBody,
     buildDigestPrompt,
     generateDigest
   };

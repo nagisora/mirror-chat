@@ -5,6 +5,8 @@
   const QUESTION_FILE_SEQ_KEY = STORAGE_KEYS.QUESTION_FILE_SEQ;
   const DIGEST_PENDING_TEXT = "生成中...";
   const DIGEST_DISABLED_TEXT = "未生成";
+  const DIGEST_START_MARKER = "<!-- MIRRORCHAT_DIGEST_START -->";
+  const DIGEST_END_MARKER = "<!-- MIRRORCHAT_DIGEST_END -->";
 
   function getQuestionExcerpt(text) {
     const cleaned = String(text)
@@ -58,9 +60,9 @@
   function buildAnswerSections(results) {
     const parts = [];
     for (const { name, markdown } of results) {
-      parts.push(`## ${name}\n\n${markdown || "(取得できませんでした)"}\n\n`);
+      parts.push(`### ${name}\n\n${markdown || "(取得できませんでした)"}`);
     }
-    return parts.join("---\n\n");
+    return parts.join("\n\n---\n\n");
   }
 
   function buildInitialDigestText(settings) {
@@ -73,25 +75,43 @@
       "",
       question,
       "",
+      "---",
+      "",
       "## まとめ",
       "",
+      DIGEST_START_MARKER,
       buildInitialDigestText(settings),
+      DIGEST_END_MARKER,
+      "",
+      "---",
+      "",
+      "## 各AI回答",
       "",
       buildAnswerSections(results)
     ].join("\n");
   }
 
   function replaceDigestSection(content, digestText) {
+    const markerBlock = `${DIGEST_START_MARKER}\n`;
+    const start = content.indexOf(markerBlock);
+    const end = content.indexOf(`\n${DIGEST_END_MARKER}`, start);
+    if (start !== -1 && end !== -1 && end >= start) {
+      return {
+        ok: true,
+        content: `${content.slice(0, start + markerBlock.length)}${digestText}${content.slice(end)}`
+      };
+    }
+
     const startMarker = "## まとめ\n\n";
-    const start = content.indexOf(startMarker);
-    if (start === -1) {
+    const fallbackStart = content.indexOf(startMarker);
+    if (fallbackStart === -1) {
       return {
         ok: false,
         error: "まとめセクションが見つかりませんでした"
       };
     }
 
-    const digestStart = start + startMarker.length;
+    const digestStart = fallbackStart + startMarker.length;
     const nextSection = content.indexOf("\n## ", digestStart);
     const digestEnd = nextSection === -1 ? content.length : nextSection;
     return {
