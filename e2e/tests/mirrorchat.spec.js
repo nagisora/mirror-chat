@@ -18,6 +18,10 @@ test.describe("MirrorChat 拡張機能", () => {
     await expect(page.locator("#prompt-input")).toBeVisible();
     await expect(page.locator("#open-tabs-button")).toBeVisible();
     await expect(page.locator("#collect-button")).toBeVisible();
+    await expect(page.locator("#resave-button")).toBeVisible();
+    await expect(page.locator("#regenerate-digest-button")).toBeVisible();
+    await expect(page.locator("#digest-model-select")).toBeVisible();
+    await expect(page.locator("#digest-status")).toBeVisible();
     const aiCheckboxes = page.locator(".ai-checkbox");
     await expect(aiCheckboxes).toHaveCount(4);
     await expect(aiCheckboxes.nth(0)).toBeChecked();
@@ -101,6 +105,8 @@ test.describe("MirrorChat 拡張機能", () => {
     await page.goto(`chrome-extension://${extensionId}/options.html`);
     await expect(page.locator("h1")).toHaveText("MirrorChat 設定");
     await expect(page.locator("#obsidian-base-url")).toBeVisible();
+    await expect(page.locator("#openrouter-enable-digest")).toBeVisible();
+    await expect(page.locator("#openrouter-api-key")).toBeVisible();
   });
 
   test("設定ページで各AIのコピーボタンセレクタが表示される", async ({ page, extensionId }) => {
@@ -187,6 +193,68 @@ test.describe("MirrorChat 拡張機能", () => {
     await expect(rootPathInput).toHaveValue("TestPath", {
       timeout: 5_000,
     });
+  });
+
+  test("OpenRouter digest 設定を保存・復元できる", async ({ page, extensionId }) => {
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+
+    await page.locator("#openrouter-enable-digest").check();
+    await page.locator("#openrouter-api-key").fill("sk-or-test");
+    await page.locator("details.advanced-settings").nth(0).locator("summary").click();
+    await page.locator("#openrouter-preferred-model").selectOption("google/gemma-3-27b-it:free");
+
+    await page.locator("#save-button").click();
+    await expect(page.locator("#status")).toContainText("保存しました", {
+      timeout: 5_000,
+    });
+
+    await page.reload();
+
+    await expect(page.locator("#openrouter-enable-digest")).toBeChecked();
+    await expect(page.locator("#openrouter-api-key")).toHaveValue("sk-or-test");
+    await page.locator("details.advanced-settings").nth(0).locator("summary").click();
+    await expect(page.locator("#openrouter-preferred-model")).toHaveValue("google/gemma-3-27b-it:free");
+  });
+
+  test("直近ノートがあれば再保存と digest再生成を実行できる", async ({ page, extensionId }) => {
+    await page.goto(`chrome-extension://${extensionId}/popup.html?standalone=1`);
+
+    await page.evaluate(() => {
+      return new Promise((resolve) => {
+        chrome.storage.sync.set(
+          {
+            mirrorchatSettings: {
+              openrouter: {
+                preferredModel: "",
+                freeModelCandidatesOverride: [
+                  "google/gemma-3-27b-it:free",
+                  "meta-llama/llama-3.3-70b-instruct:free"
+                ]
+              }
+            }
+          },
+          () => {
+            chrome.storage.local.set(
+              {
+                mirrorchatLastNoteSnapshot: {
+                  question: "テスト質問",
+                  results: [{ name: "ChatGPT", markdown: "テスト回答" }],
+                  notePath: "Test/01-test.md"
+                }
+              },
+              resolve
+            );
+          }
+        );
+      });
+    });
+
+    await page.reload();
+
+    await expect(page.locator("#resave-button")).toBeEnabled();
+    await expect(page.locator("#regenerate-digest-button")).toBeEnabled();
+    await expect(page.locator("#digest-model-select")).toHaveValue("");
+    await expect(page.locator("#digest-model-select option")).toHaveCount(3);
   });
 
   test("高度なAI設定を保存・復元できる", async ({ page, extensionId }) => {

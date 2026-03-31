@@ -45,7 +45,6 @@
       <div class="actions">
         <button id="send-button" disabled>送信</button>
         <button id="collect-button" disabled>回答を取得</button>
-        <button id="resave-button" disabled>再保存</button>
         <a href="options.html" target="_blank" class="link">設定</a>
       </div>
       <label class="checkbox-row">
@@ -53,9 +52,22 @@
         <span>既存の会話に続けて送信</span>
       </label>
       <p id="status" class="status" aria-live="polite"></p>
+      <div id="digest-status" class="status status-row" aria-live="polite">
+        <span id="digest-status-text"></span>
+        <span id="digest-status-error" class="status-error"></span>
+      </div>
+      <hr class="section-divider" />
+      <div class="actions secondary-actions digest-actions">
+        <button id="resave-button" disabled>再保存</button>
+        <button id="regenerate-digest-button" disabled>digest再生成</button>
+        <select id="digest-model-select" aria-label="digest再生成モデル" disabled>
+          <option value="">自動選択</option>
+        </select>
+      </div>
       <section id="retry-section" class="retry-section" hidden>
         <h2>保存に失敗したデータ</h2>
-        <button id="retry-button">再送信</button>
+        <p>保存失敗キューに残っているデータだけを再試行します。直近ノートの上書き保存は上の「直近ノートを再保存」を使ってください。</p>
+        <button id="retry-button">失敗キューを再試行</button>
       </section>
     </main>
     <script src="constants.js"></script>

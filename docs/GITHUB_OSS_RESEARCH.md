@@ -50,3 +50,80 @@
 本リポジトリでは、これら OSS をそのままフォークしてベースにするのではなく、
 **設計とノウハウのみを取り込みつつ、自前のシンプルな実装を行う** 方針とします。
 
+## 4. OpenRouter free モデル選定ロジック調査（Issue #25）
+
+### 調査対象
+
+- `steipete/summarize`
+
+### 参考にすべき主なファイル
+
+- `src/refresh-free.ts`
+  - OpenRouter `/models` 取得
+  - `:free` フィルタ
+  - 古いモデル・小さいモデルの除外
+  - 実疎通テスト（1回目）＋選抜候補の追加計測（2回目以降）
+  - `smart`（性能寄り）と `fast`（速度寄り）を混ぜた候補選定
+  - 失敗分類（rate limit / no providers / timeout / provider error など）
+- `src/model-auto.ts`
+  - native model id から OpenRouter model id へのフォールバック解決
+  - slug 正規化、曖昧一致時の安全側スキップ
+- `src/run/openrouter.ts`
+  - `No allowed providers` 時にモデル別 endpoint 情報から provider ヒントを組み立て
+- `tests/refresh-free.test.ts`
+  - 選定・除外・失敗分類・リトライ挙動を網羅
+- `tests/model-auto.test.ts`
+  - OpenRouter fallback の追加条件、曖昧時スキップ、id 正規化を検証
+
+### MirrorChat に流用できる要素
+
+- モデル候補列挙
+  - OpenRouter `/models` から `:free` のみ抽出する考え方
+- サイズ/新しさによる除外
+  - `minParamB`、`maxAgeDays` を使った足切り
+- 疎通テスト
+  - 単語1つ返答の軽量プロンプトで動作確認する方式
+- smart / fast のバランス選定
+  - 文脈長・出力長・成功率・レイテンシを併用して候補を並び替える方針
+- 失敗分類
+  - `rateLimitMin` / `rateLimitDay` / `noProviders` / `timeout` / `providerError` / `other`
+  - min rate limit 時の短いクールダウン + 1回再試行
+
+### MirrorChat では簡略化すべき要素
+
+- `~/.summarize/config.json` の読み書き
+  - MirrorChat には不要。Chrome storage 側の設定として持つ
+- CLI/daemon 前提ロジック
+  - コマンド引数・TTY 表示・CLI fallback は不要
+- provider 解決の複雑な分岐
+  - まずは OpenRouter free digest 用の最小経路だけ実装する
+
+### MirrorChat 向けの具体導入案
+
+1. Phase 1（最小実装）
+   - 固定の free 候補配列を持つ
+   - 失敗時は次候補へフォールバック
+   - 失敗分類は `rateLimit` / `noProviders` / `timeout` / `other` の4分類に縮約
+
+2. Phase 2（軽量 refresh）
+   - 手動実行 or 日次で `/models` を再取得
+   - `:free` + `maxAgeDays` + `minParamB` を適用して候補更新
+   - 更新結果は Chrome storage へ保存
+
+3. Phase 3（必要なら）
+   - 候補に対して軽量疎通テストを実施
+   - 成功率/レイテンシで smart/fast 混在の上位 N 件を選ぶ
+
+### 結論
+
+- 判定: **「部分移植する（設計を借りて最小実装に落とす）」が妥当**
+- 理由:
+  - 実装コードとテストが揃っており、再利用判断の根拠が明確
+  - free モデル運用で重要な失敗分類と再試行方針が現実的
+  - ただし summarize の CLI/設定ファイル運用は MirrorChat に対して過剰
+
+### Issue #24 への引き継ぎメモ
+
+- まずは fixed 候補 + フォールバックで digest 非同期生成を成立させる
+- 安定後に refresh 機能を追加する二段階戦略が、実装コストと運用安定性のバランスが良い
+

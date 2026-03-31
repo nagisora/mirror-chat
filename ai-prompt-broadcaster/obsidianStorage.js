@@ -2,13 +2,18 @@
   const { STORAGE_KEYS } = self.MirrorChatConstants;
   const FOLDER_SEQ_KEY = STORAGE_KEYS.FOLDER_SEQ;
   const LAST_SAVED_FOLDER_KEY = STORAGE_KEYS.LAST_SAVED_FOLDER;
+  const QUESTION_FILE_SEQ_KEY = STORAGE_KEYS.QUESTION_FILE_SEQ;
+  const DIGEST_PENDING_TEXT = "生成中...";
+  const DIGEST_DISABLED_TEXT = "未生成";
 
-  const AI_NUMBERED_FILES = {
-    chatgpt: "02-01-ChatGPT.md",
-    claude: "02-02-Claude.md",
-    gemini: "02-03-Gemini.md",
-    grok: "02-04-Grok.md"
-  };
+  function getQuestionExcerpt(text) {
+    const cleaned = String(text)
+      .replace(/[\r\n]/g, " ")
+      .replace(/[/\\?*:"<>|.]/g, "");
+    return Array.from(cleaned.trim())
+      .slice(0, 20)
+      .join("") || "q";
+  }
 
   async function getNextFolderSeq() {
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -27,28 +32,89 @@
   }
 
   async function getObsidianFolderName(question) {
-    const cleaned = String(question)
-      .replace(/[\r\n]/g, " ")
-      .replace(/[/\\?*:"<>|.]/g, "");
-    const safe = Array.from(cleaned.trim())
-      .slice(0, 20)
-      .join("") || "q";
+    const safe = getQuestionExcerpt(question);
     const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
     const seq = await getNextFolderSeq();
     const seqStr = String(seq).padStart(2, "0");
     return `${date}-${seqStr}-${safe}`;
   }
 
-  function getNumberedFileName(aiKey) {
-    return AI_NUMBERED_FILES[aiKey] || null;
+  async function getNextQuestionFileSeq(basePath) {
+    const stored = await new Promise((resolve) =>
+      chrome.storage.local.get(QUESTION_FILE_SEQ_KEY, (x) => resolve(x[QUESTION_FILE_SEQ_KEY] || {}))
+    );
+    stored[basePath] = (stored[basePath] || 0) + 1;
+    await new Promise((resolve) =>
+      chrome.storage.local.set({ [QUESTION_FILE_SEQ_KEY]: stored }, resolve)
+    );
+    return stored[basePath];
   }
 
-  function buildSummary(results) {
+  function getQuestionFileName(question, seq) {
+    const seqStr = String(seq).padStart(2, "0");
+    return `${seqStr}-${getQuestionExcerpt(question)}.md`;
+  }
+
+  function buildAnswerSections(results) {
     const parts = [];
     for (const { name, markdown } of results) {
-      parts.push(`## ${name}\n\n${markdown || "(取得できませんでした)"}\n\n`);
+      parts.push(`### ${name}\n\n${markdown || "(取得できませんでした)"}`);
     }
-    return parts.join("---\n\n");
+    return parts.join("\n\n---\n\n");
+  }
+
+  function buildInitialDigestText(settings) {
+    return settings.openrouter?.enableDigest ? DIGEST_PENDING_TEXT : DIGEST_DISABLED_TEXT;
+  }
+
+  function buildQuestionAnswersContent(question, results, settings) {
+    return [
+      "## 質問",
+      "",
+      question,
+      "",
+      "---",
+      "",
+      "## まとめ",
+      "",
+      buildInitialDigestText(settings),
+      "",
+      "---",
+      "",
+      "## 各AI回答",
+      "",
+      buildAnswerSections(results)
+    ].join("\n");
+  }
+
+  function replaceDigestSection(content, digestText) {
+    const legacyStartMarker = "<!-- MIRRORCHAT_DIGEST_START -->\n";
+    const legacyEndMarker = "\n<!-- MIRRORCHAT_DIGEST_END -->";
+    const legacyStart = content.indexOf(legacyStartMarker);
+    const legacyEnd = content.indexOf(legacyEndMarker, legacyStart);
+    if (legacyStart !== -1 && legacyEnd !== -1 && legacyEnd >= legacyStart) {
+      return {
+        ok: true,
+        content: `${content.slice(0, legacyStart)}${digestText}${content.slice(legacyEnd + legacyEndMarker.length)}`
+      };
+    }
+
+    const startMarker = "## まとめ\n\n";
+    const fallbackStart = content.indexOf(startMarker);
+    if (fallbackStart === -1) {
+      return {
+        ok: false,
+        error: "まとめセクションが見つかりませんでした"
+      };
+    }
+
+    const digestStart = fallbackStart + startMarker.length;
+    const nextSection = content.indexOf("\n\n---\n\n## 各AI回答", digestStart);
+    const digestEnd = nextSection === -1 ? content.length : nextSection;
+    return {
+      ok: true,
+      content: `${content.slice(0, digestStart)}${digestText}${content.slice(digestEnd)}`
+    };
   }
 
   async function saveToObsidian(question, results, settings) {
@@ -61,26 +127,19 @@
       return { ok: false, error: "ObsidianのベースURLが設定されていません" };
     }
 
-    const files = [
-      { path: `${basePath}/01-Question.md`, content: question },
-      ...results.map((r) => {
-        const fname = getNumberedFileName(r.ai);
-        return { path: `${basePath}/${fname || `${r.name}.md`}`, content: r.markdown || "" };
-      }),
-      { path: `${basePath}/03-Summary.md`, content: buildSummary(results) }
-    ];
-
-    for (const f of files) {
-      const res = await self.ObsidianClient.createNote(baseUrl, token, f.path, f.content);
-      if (!res.ok) {
-        return { ok: false, error: res.error, payload: { question, results, basePath } };
-      }
+    const questionSeq = await getNextQuestionFileSeq(basePath);
+    const fileName = getQuestionFileName(question, questionSeq);
+    const notePath = `${basePath}/${fileName}`;
+    const content = buildQuestionAnswersContent(question, results, settings);
+    const res = await self.ObsidianClient.createNote(baseUrl, token, notePath, content);
+    if (!res.ok) {
+      return { ok: false, error: res.error, payload: { question, results, basePath } };
     }
 
     await new Promise((resolve) =>
       chrome.storage.local.set({ [LAST_SAVED_FOLDER_KEY]: basePath }, resolve)
     );
-    return { ok: true };
+    return { ok: true, basePath, fileName, notePath };
   }
 
   async function appendToObsidian(basePath, question, results, settings) {
@@ -90,47 +149,64 @@
       return { ok: false, error: "ObsidianのベースURLが設定されていません" };
     }
 
-    const questionAppend = `---\n\n## 続きの質問\n\n${question}\n\n`;
-    const resQuestion = await self.ObsidianClient.appendToNote(
-      baseUrl,
-      token,
-      `${basePath}/01-Question.md`,
-      questionAppend
-    );
-    if (!resQuestion.ok) {
-      return { ok: false, error: resQuestion.error };
+    const questionSeq = await getNextQuestionFileSeq(basePath);
+    const fileName = getQuestionFileName(question, questionSeq);
+    const notePath = `${basePath}/${fileName}`;
+    const content = buildQuestionAnswersContent(question, results, settings);
+    const res = await self.ObsidianClient.createNote(baseUrl, token, notePath, content);
+    if (!res.ok) {
+      return { ok: false, error: res.error };
     }
 
-    for (const r of results) {
-      const fname = getNumberedFileName(r.ai) || `${r.name}.md`;
-      const appendContent = `---\n\n### 続きの質問\n\n${question}\n\n### 回答\n\n${r.markdown || "(取得できませんでした)"}\n\n`;
-      const res = await self.ObsidianClient.appendToNote(
-        baseUrl,
-        token,
-        `${basePath}/${fname}`,
-        appendContent
-      );
-      if (!res.ok) {
-        return { ok: false, error: res.error };
-      }
+    return { ok: true, basePath, fileName, notePath };
+  }
+
+  async function updateDigestInObsidian(notePath, digestText, settings) {
+    const { baseUrl, token } = settings.obsidian || {};
+
+    if (!baseUrl) {
+      return { ok: false, error: "ObsidianのベースURLが設定されていません" };
     }
 
-    const summaryAppend = `---\n\n## 続きの質問\n\n${question}\n\n${buildSummary(results)}`;
-    const resSummary = await self.ObsidianClient.appendToNote(
-      baseUrl,
-      token,
-      `${basePath}/03-Summary.md`,
-      summaryAppend
-    );
-    if (!resSummary.ok) {
-      return { ok: false, error: resSummary.error };
+    const getRes = await self.ObsidianClient.getNote(baseUrl, token, notePath);
+    if (!getRes.ok) {
+      return { ok: false, error: getRes.error };
+    }
+
+    const replaced = replaceDigestSection(getRes.content || "", digestText);
+    if (!replaced.ok) {
+      return { ok: false, error: replaced.error };
+    }
+
+    const saveRes = await self.ObsidianClient.createNote(baseUrl, token, notePath, replaced.content);
+    if (!saveRes.ok) {
+      return { ok: false, error: saveRes.error };
     }
 
     return { ok: true };
   }
 
+  async function rewriteNoteInObsidian(notePath, question, results, settings) {
+    const { baseUrl, token } = settings.obsidian || {};
+
+    if (!baseUrl) {
+      return { ok: false, error: "ObsidianのベースURLが設定されていません" };
+    }
+
+    const content = buildQuestionAnswersContent(question, results, settings);
+    const saveRes = await self.ObsidianClient.createNote(baseUrl, token, notePath, content);
+    if (!saveRes.ok) {
+      return { ok: false, error: saveRes.error };
+    }
+
+    return { ok: true, notePath };
+  }
+
   self.MirrorChatObsidianStorage = {
     saveToObsidian,
-    appendToObsidian
+    appendToObsidian,
+    updateDigestInObsidian,
+    rewriteNoteInObsidian,
+    replaceDigestSection
   };
 })();

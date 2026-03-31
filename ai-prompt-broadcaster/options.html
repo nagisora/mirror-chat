@@ -26,6 +26,31 @@
       </section>
 
       <section>
+        <h2>OpenRouter（Digest生成用）</h2>
+        <label class="checkbox-row">
+          <input id="openrouter-enable-digest" type="checkbox" />
+          <span>回答保存後に digest を非同期生成する</span>
+        </label>
+        <label>
+          OpenRouter API キー
+          <input id="openrouter-api-key" type="password" placeholder="sk-or-..." />
+        </label>
+        <details class="advanced-settings">
+          <summary>高度な設定</summary>
+          <label>
+            使用モデルを固定する（任意）
+            <select id="openrouter-preferred-model"></select>
+          </label>
+          <div class="actions">
+            <button id="openrouter-refresh-models-button" type="button">free候補を手動更新</button>
+            <span id="openrouter-refresh-status" aria-live="polite"></span>
+          </div>
+          <p id="openrouter-refresh-meta"></p>
+          <p>digest 実行前には free 候補を自動更新します。ここでは候補一覧を先に確認・更新できます。</p>
+        </details>
+      </section>
+
+      <section>
         <h2>各AIサイトのDOMセレクタ</h2>
 
         <div class="ai-config" data-ai="chatgpt">
@@ -195,6 +220,8 @@
 
     <script src="constants.js"></script>
     <script src="storage.js"></script>
+    <script src="openRouterFreeModels.js"></script>
+    <script src="openRouterClient.js"></script>
     <script src="options.js"></script>
   </body>
 </html>
