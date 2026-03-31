@@ -1,4 +1,6 @@
 (function () {
+  const DEFAULT_MIN_PARAM_B = 27;
+  const DEFAULT_MAX_AGE_DAYS = 180;
   const DEFAULT_DIGEST_FREE_MODELS = [
     "google/gemma-3-27b-it:free",
     "meta-llama/llama-3.3-70b-instruct:free",
@@ -50,6 +52,80 @@
     return "other";
   }
 
+  function inferParamBFromText(text) {
+    const raw = String(text || "");
+    const match = raw.match(/(?:^|[^a-z0-9])(\d+(?:\.\d+)?)b(?:[^a-z0-9]|$)/i);
+    if (match) return Number(match[1]);
+    const eMatch = raw.match(/(?:^|[^a-z0-9])e(\d+(?:\.\d+)?)b(?:[^a-z0-9]|$)/i);
+    if (eMatch) return Number(eMatch[1]);
+    return null;
+  }
+
+  function toModelEntry(entry) {
+    if (!entry || typeof entry !== "object") return null;
+    const obj = entry;
+    const id = typeof obj.id === "string" ? obj.id.trim() : "";
+    if (!id) return null;
+    const name = typeof obj.name === "string" ? obj.name.trim() : "";
+    const createdAtMs = typeof obj.created === "number" && Number.isFinite(obj.created) && obj.created > 0
+      ? Math.round(obj.created * 1000)
+      : null;
+    return {
+      id,
+      name,
+      createdAtMs,
+      inferredParamB: inferParamBFromText(`${id} ${name}`)
+    };
+  }
+
+  function refreshDigestFreeModels({
+    catalog,
+    preferredModel,
+    minParamB = DEFAULT_MIN_PARAM_B,
+    maxAgeDays = DEFAULT_MAX_AGE_DAYS
+  } = {}) {
+    const now = Date.now();
+    const maxAgeMs = maxAgeDays > 0 ? maxAgeDays * 24 * 60 * 60 * 1000 : 0;
+    const entries = (Array.isArray(catalog) ? catalog : [])
+      .map(toModelEntry)
+      .filter((entry) => Boolean(entry));
+
+    const freeModels = entries.filter((entry) => entry.id.endsWith(":free"));
+    const ageFiltered = freeModels.filter((entry) => {
+      if (maxAgeMs <= 0) return true;
+      if (entry.createdAtMs === null) return false;
+      const age = now - entry.createdAtMs;
+      return age >= 0 && age <= maxAgeMs;
+    });
+    const sizeFiltered = ageFiltered.filter((entry) => {
+      if (entry.inferredParamB === null) return true;
+      return entry.inferredParamB >= minParamB;
+    });
+
+    const sorted = sizeFiltered.slice().sort((a, b) => {
+      const aCreated = a.createdAtMs ?? -1;
+      const bCreated = b.createdAtMs ?? -1;
+      if (aCreated !== bCreated) return bCreated - aCreated;
+      const aSize = a.inferredParamB ?? -1;
+      const bSize = b.inferredParamB ?? -1;
+      if (aSize !== bSize) return bSize - aSize;
+      return a.id.localeCompare(b.id);
+    });
+
+    const refreshedCandidates = sorted.map((entry) => entry.id);
+    return {
+      candidates: buildCandidateList({ preferredModel, candidates: refreshedCandidates }),
+      stats: {
+        catalogCount: entries.length,
+        freeCount: freeModels.length,
+        ageFilteredCount: ageFiltered.length,
+        finalCount: sorted.length,
+        minParamB,
+        maxAgeDays
+      }
+    };
+  }
+
   async function tryCandidates({ preferredModel, candidates, attempt }) {
     const orderedCandidates = buildCandidateList({ preferredModel, candidates });
     const attempts = [];
@@ -89,6 +165,7 @@
     getDefaultDigestFreeModels,
     buildCandidateList,
     classifyOpenRouterError,
+    refreshDigestFreeModels,
     tryCandidates
   };
 })();

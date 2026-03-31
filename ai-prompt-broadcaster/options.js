@@ -5,12 +5,35 @@ document.addEventListener("DOMContentLoaded", async () => {
   const openRouterEnableDigestInput = document.getElementById("openrouter-enable-digest");
   const openRouterApiKeyInput = document.getElementById("openrouter-api-key");
   const openRouterPreferredModelInput = document.getElementById("openrouter-preferred-model");
+  const openRouterRefreshButton = document.getElementById("openrouter-refresh-models-button");
+  const openRouterRefreshStatus = document.getElementById("openrouter-refresh-status");
+  const openRouterRefreshMeta = document.getElementById("openrouter-refresh-meta");
   const saveButton = document.getElementById("save-button");
   const status = document.getElementById("status");
 
   const storage = window.MirrorChatStorage;
+  const openRouterClient = window.MirrorChatOpenRouterClient;
+  const openRouterFreeModels = window.MirrorChatOpenRouterFreeModels;
   const MESSAGE_TYPES = window.MirrorChatConstants?.MESSAGE_TYPES || {};
   const MSG_RETRY = MESSAGE_TYPES.RETRY || "MIRRORCHAT_RETRY";
+
+  function formatRefreshMeta(openRouterSettings) {
+    const candidates = Array.isArray(openRouterSettings?.freeModelCandidatesOverride)
+      ? openRouterSettings.freeModelCandidatesOverride
+      : [];
+    const lastRefreshAt = String(openRouterSettings?.lastRefreshAt || "").trim();
+    if (!lastRefreshAt && candidates.length === 0) {
+      return "更新済み候補はまだありません。";
+    }
+    const parts = [];
+    if (candidates.length > 0) {
+      parts.push(`候補数: ${candidates.length}`);
+    }
+    if (lastRefreshAt) {
+      parts.push(`最終更新: ${new Date(lastRefreshAt).toLocaleString("ja-JP")}`);
+    }
+    return parts.join(" / ");
+  }
 
   async function restore() {
     const settings = await storage.getSettings();
@@ -21,6 +44,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     openRouterEnableDigestInput.checked = !!settings.openrouter?.enableDigest;
     openRouterApiKeyInput.value = settings.openrouter?.apiKey || "";
     openRouterPreferredModelInput.value = settings.openrouter?.preferredModel || "";
+    openRouterRefreshMeta.textContent = formatRefreshMeta(settings.openrouter);
+    openRouterRefreshStatus.textContent = "";
 
     document
       .querySelectorAll(".ai-config")
@@ -106,6 +131,32 @@ document.addEventListener("DOMContentLoaded", async () => {
     chrome.runtime.sendMessage({ type: MSG_RETRY });
     status.textContent = "再送信を開始しました。";
     setTimeout(() => { status.textContent = ""; }, 3000);
+  });
+
+  openRouterRefreshButton.addEventListener("click", async () => {
+    const settings = await storage.getSettings();
+    const apiKey = openRouterApiKeyInput.value.trim() || settings.openrouter?.apiKey || "";
+    openRouterRefreshButton.disabled = true;
+    openRouterRefreshStatus.textContent = "OpenRouter の free 候補を更新中...";
+    try {
+      const catalog = await openRouterClient.fetchModelsCatalog({ apiKey, fetchImpl: fetch });
+      const refreshed = openRouterFreeModels.refreshDigestFreeModels({
+        catalog,
+        preferredModel: openRouterPreferredModelInput.value.trim()
+      });
+      const nextSettings = await storage.saveSettings({
+        openrouter: {
+          freeModelCandidatesOverride: refreshed.candidates,
+          lastRefreshAt: new Date().toISOString()
+        }
+      });
+      openRouterRefreshStatus.textContent = `free 候補を更新しました。${refreshed.candidates.length}件`;
+      openRouterRefreshMeta.textContent = formatRefreshMeta(nextSettings.openrouter);
+    } catch (error) {
+      openRouterRefreshStatus.textContent = `候補更新に失敗しました: ${error instanceof Error ? error.message : String(error)}`;
+    } finally {
+      openRouterRefreshButton.disabled = false;
+    }
   });
 });
 

@@ -53,6 +53,7 @@
     const prompt = buildDigestPrompt(question, results);
     const selection = await freeModelSelector.tryCandidates({
       preferredModel: settings?.openrouter?.preferredModel,
+      candidates: settings?.openrouter?.freeModelCandidatesOverride,
       attempt: async (modelId) =>
         openRouterClient.requestChatCompletion({
           apiKey,

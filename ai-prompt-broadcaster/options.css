@@ -88,3 +88,9 @@ button {
   color: #008000;
 }
 
+#openrouter-refresh-status,
+#openrouter-refresh-meta {
+  font-size: 12px;
+  color: #555;
+}
+

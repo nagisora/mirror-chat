@@ -36,6 +36,7 @@ E2E の詳細は [e2e/README.md](../e2e/README.md) を参照。
 - 保存成功後、background が OpenRouter を使って digest を非同期生成する
 - digest 生成は raw 回答保存の成否に影響させない
 - free モデル候補の選定とフォールバックは [ai-prompt-broadcaster/openRouterFreeModels.js](../ai-prompt-broadcaster/openRouterFreeModels.js) に分離している
+- OpenRouter `/models` を使った free 候補の手動 refresh も [ai-prompt-broadcaster/openRouterFreeModels.js](../ai-prompt-broadcaster/openRouterFreeModels.js) に集約している
 - OpenRouter API 呼び出しは [ai-prompt-broadcaster/openRouterClient.js](../ai-prompt-broadcaster/openRouterClient.js)、digest プロンプトと調停は [ai-prompt-broadcaster/digestService.js](../ai-prompt-broadcaster/digestService.js) が担う
 
 ---

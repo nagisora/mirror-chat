@@ -18,7 +18,9 @@
     openrouter: {
       enableDigest: false,
       apiKey: "",
-      preferredModel: ""
+      preferredModel: "",
+      freeModelCandidatesOverride: [],
+      lastRefreshAt: ""
     },
     aiConfigs: cloneAiConfigs(constants.AI_CONFIG_DEFAULTS)
   };

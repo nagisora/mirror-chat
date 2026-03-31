@@ -41,6 +41,11 @@
             使用モデルを固定する（任意）
             <input id="openrouter-preferred-model" type="text" placeholder="例: google/gemma-3-27b-it:free" />
           </label>
+          <div class="actions">
+            <button id="openrouter-refresh-models-button" type="button">free候補を更新</button>
+            <span id="openrouter-refresh-status" aria-live="polite"></span>
+          </div>
+          <p id="openrouter-refresh-meta"></p>
           <p>未入力時は、組み込みの free モデル候補を順に試します。</p>
         </details>
       </section>
@@ -215,6 +220,8 @@
 
     <script src="constants.js"></script>
     <script src="storage.js"></script>
+    <script src="openRouterFreeModels.js"></script>
+    <script src="openRouterClient.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

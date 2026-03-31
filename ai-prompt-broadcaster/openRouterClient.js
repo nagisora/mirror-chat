@@ -2,6 +2,35 @@
   const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
   const DEFAULT_TIMEOUT_MS = 30000;
 
+  async function requestJson({ url, apiKey, fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+    const controller = new AbortController();
+    const timerId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const headers = { Accept: "application/json" };
+      if (apiKey) {
+        headers.Authorization = `Bearer ${apiKey}`;
+      }
+      const response = await fetchImpl(url, {
+        method: "GET",
+        headers,
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`OpenRouter HTTP ${response.status}: ${errorText || response.statusText}`);
+      }
+      return await response.json();
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw new Error(`OpenRouter request timed out after ${timeoutMs}ms`, { cause: error });
+      }
+      throw error;
+    } finally {
+      clearTimeout(timerId);
+    }
+  }
+
   function extractTextFromMessageContent(content) {
     if (typeof content === "string") return content.trim();
     if (!Array.isArray(content)) return "";
@@ -68,7 +97,23 @@
     }
   }
 
+  async function fetchModelsCatalog({
+    apiKey,
+    fetchImpl = fetch,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    baseUrl = DEFAULT_BASE_URL
+  }) {
+    const payload = await requestJson({
+      url: `${baseUrl}/models`,
+      apiKey,
+      fetchImpl,
+      timeoutMs
+    });
+    return Array.isArray(payload?.data) ? payload.data : [];
+  }
+
   self.MirrorChatOpenRouterClient = {
-    requestChatCompletion
+    requestChatCompletion,
+    fetchModelsCatalog
   };
 })();
