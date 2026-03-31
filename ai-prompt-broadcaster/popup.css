@@ -66,7 +66,7 @@ label {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .checkbox-row input[type="checkbox"] {
@@ -95,6 +95,27 @@ textarea {
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
+}
+
+.secondary-actions {
+  margin-bottom: 6px;
+}
+
+.digest-actions {
+  flex-wrap: wrap;
+}
+
+.digest-actions select {
+  flex: 0 1 240px;
+  width: 240px;
+  min-width: 180px;
+  padding: 6px 8px;
+}
+
+.section-divider {
+  border: 0;
+  border-top: 1px solid #e5e7eb;
+  margin: 10px 0;
 }
 
 button {
@@ -142,6 +163,16 @@ button:disabled {
 
 #resave-button:hover:not(:disabled) {
   background: #c2410c;
+}
+
+#regenerate-digest-button {
+  background: #0f766e;
+  color: #fff;
+  border-color: #0f766e;
+}
+
+#regenerate-digest-button:hover:not(:disabled) {
+  background: #115e59;
 }
 
 .link {

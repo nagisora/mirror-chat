@@ -15,6 +15,7 @@ importScripts(
 const { AI_KEYS, STORAGE_KEYS, MESSAGE_TYPES } = self.MirrorChatConstants;
 const CURRENT_TASK_KEY = STORAGE_KEYS.CURRENT_TASK;
 const LAST_SAVED_FOLDER_KEY = STORAGE_KEYS.LAST_SAVED_FOLDER;
+const LAST_NOTE_SNAPSHOT_KEY = STORAGE_KEYS.LAST_NOTE_SNAPSHOT;
 
 const NOTIFICATION_ICON_URL = chrome.runtime.getURL("icon128.png");
 
@@ -39,6 +40,20 @@ const digestService = self.MirrorChatDigestService;
 
 function sendDigestStatus(text) {
   chrome.runtime.sendMessage?.({ type: MESSAGE_TYPES.DIGEST_STATUS, text });
+}
+
+async function readLastNoteSnapshot() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(LAST_NOTE_SNAPSHOT_KEY, (data) => {
+      resolve(data?.[LAST_NOTE_SNAPSHOT_KEY] || null);
+    });
+  });
+}
+
+async function writeLastNoteSnapshot(snapshot) {
+  return new Promise((resolve) => {
+    chrome.storage.local.set({ [LAST_NOTE_SNAPSHOT_KEY]: snapshot }, resolve);
+  });
 }
 
 async function runDigestFollowUp({ question, results, settings, notePath }) {
@@ -190,6 +205,22 @@ async function runTask(task) {
       await new Promise((resolve) => chrome.storage.local.remove(CURRENT_TASK_KEY, resolve));
     } catch (e) {
       console.warn("MirrorChat: CURRENT_TASK_KEY の削除に失敗しました:", e);
+    }
+  }
+
+  if (saveResult.ok && saveResult.notePath) {
+    try {
+      await writeLastNoteSnapshot({
+        question: task.prompt,
+        results,
+        notePath: saveResult.notePath,
+        basePath: saveResult.basePath || null,
+        fileName: saveResult.fileName || null,
+        isFollowUp: !!task.isFollowUp,
+        savedAt: Date.now()
+      });
+    } catch (error) {
+      console.warn("MirrorChat: 直近ノート情報の保存に失敗しました:", error);
     }
   }
 
@@ -378,6 +409,84 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         });
         if (!taskQueue.isProcessing() && items.length > 0) processNext();
         sendResponse({ ok: true });
+      });
+      return true;
+    },
+
+    [MESSAGE_TYPES.RESAVE_LAST]: () => {
+      (async () => {
+        const snapshot = await readLastNoteSnapshot();
+        if (!snapshot?.notePath || !snapshot?.question || !Array.isArray(snapshot?.results)) {
+          sendResponse({ ok: false, error: "再保存できる直近ノートがありません。まず通常の保存を一度実行してください。" });
+          return;
+        }
+
+        const settings = await self.MirrorChatStorage.getSettings();
+        const resaveResult = await obsidianStorage.rewriteNoteInObsidian(
+          snapshot.notePath,
+          snapshot.question,
+          snapshot.results,
+          settings
+        );
+        if (!resaveResult.ok) {
+          sendResponse({ ok: false, error: resaveResult.error });
+          return;
+        }
+
+        aiCommunication.sendStatusText("直近ノートを再保存しました。");
+
+        if (snapshot.notePath) {
+          runDigestFollowUp({
+            question: snapshot.question,
+            results: snapshot.results,
+            settings,
+            notePath: snapshot.notePath
+          }).catch((error) => {
+            sendDigestStatus("digest の再生成に失敗しました。");
+            console.error("MirrorChat digest follow-up error:", error);
+          });
+        }
+
+        sendResponse({ ok: true, notePath: snapshot.notePath });
+      })().catch((error) => {
+        console.error("MirrorChat resave error:", error);
+        sendResponse({ ok: false, error: error?.message || String(error) });
+      });
+      return true;
+    },
+
+    [MESSAGE_TYPES.REGENERATE_DIGEST]: () => {
+      (async () => {
+        const snapshot = await readLastNoteSnapshot();
+        if (!snapshot?.notePath || !snapshot?.question || !Array.isArray(snapshot?.results)) {
+          sendResponse({ ok: false, error: "digest を再生成できる直近ノートがありません。まず通常の保存を一度実行してください。" });
+          return;
+        }
+
+        const selectedModel = String(msg.modelId || "").trim();
+        const settings = await self.MirrorChatStorage.getSettings();
+        const digestSettings = {
+          ...settings,
+          openrouter: {
+            ...(settings.openrouter || {}),
+            preferredModel: selectedModel
+          }
+        };
+
+        runDigestFollowUp({
+          question: snapshot.question,
+          results: snapshot.results,
+          settings: digestSettings,
+          notePath: snapshot.notePath
+        }).catch((error) => {
+          sendDigestStatus("digest の再生成に失敗しました。");
+          console.error("MirrorChat digest regeneration error:", error);
+        });
+
+        sendResponse({ ok: true, notePath: snapshot.notePath, modelId: selectedModel });
+      })().catch((error) => {
+        console.error("MirrorChat regenerate digest error:", error);
+        sendResponse({ ok: false, error: error?.message || String(error) });
       });
       return true;
     }

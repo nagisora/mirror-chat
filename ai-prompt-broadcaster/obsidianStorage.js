@@ -186,10 +186,27 @@
     return { ok: true };
   }
 
+  async function rewriteNoteInObsidian(notePath, question, results, settings) {
+    const { baseUrl, token } = settings.obsidian || {};
+
+    if (!baseUrl) {
+      return { ok: false, error: "ObsidianのベースURLが設定されていません" };
+    }
+
+    const content = buildQuestionAnswersContent(question, results, settings);
+    const saveRes = await self.ObsidianClient.createNote(baseUrl, token, notePath, content);
+    if (!saveRes.ok) {
+      return { ok: false, error: saveRes.error };
+    }
+
+    return { ok: true, notePath };
+  }
+
   self.MirrorChatObsidianStorage = {
     saveToObsidian,
     appendToObsidian,
     updateDigestInObsidian,
+    rewriteNoteInObsidian,
     replaceDigestSection
   };
 })();
