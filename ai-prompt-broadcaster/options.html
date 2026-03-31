@@ -26,6 +26,26 @@
       </section>
 
       <section>
+        <h2>OpenRouter（Digest生成用）</h2>
+        <label class="checkbox-row">
+          <input id="openrouter-enable-digest" type="checkbox" />
+          <span>回答保存後に digest を非同期生成する</span>
+        </label>
+        <label>
+          OpenRouter API キー
+          <input id="openrouter-api-key" type="password" placeholder="sk-or-..." />
+        </label>
+        <details class="advanced-settings">
+          <summary>高度な設定</summary>
+          <label>
+            使用モデルを固定する（任意）
+            <input id="openrouter-preferred-model" type="text" placeholder="例: google/gemma-3-27b-it:free" />
+          </label>
+          <p>未入力時は、組み込みの free モデル候補を順に試します。</p>
+        </details>
+      </section>
+
+      <section>
         <h2>各AIサイトのDOMセレクタ</h2>
 
         <div class="ai-config" data-ai="chatgpt">

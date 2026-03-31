@@ -153,6 +153,11 @@ button:disabled {
   font-size: 12px;
   color: #008000;
   margin: 0;
+  min-height: 16px;
+}
+
+#digest-status {
+  color: #555;
 }
 
 .retry-section {

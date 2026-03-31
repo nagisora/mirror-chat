@@ -15,6 +15,11 @@
       token: "",
       rootPath: "200-AI Research"
     },
+    openrouter: {
+      enableDigest: false,
+      apiKey: "",
+      preferredModel: ""
+    },
     aiConfigs: cloneAiConfigs(constants.AI_CONFIG_DEFAULTS)
   };
 

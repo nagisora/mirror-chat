@@ -2,6 +2,9 @@ importScripts(
   "constants.js",
   "storage.js",
   "obsidianClient.js",
+  "openRouterFreeModels.js",
+  "openRouterClient.js",
+  "digestService.js",
   "taskQueue.js",
   "errorRetry.js",
   "obsidianStorage.js",
@@ -32,6 +35,43 @@ const retryStore = self.MirrorChatRetryStore;
 const obsidianStorage = self.MirrorChatObsidianStorage;
 const tabManager = self.MirrorChatTabManager;
 const aiCommunication = self.MirrorChatAICommunication;
+const digestService = self.MirrorChatDigestService;
+
+function sendDigestStatus(text) {
+  chrome.runtime.sendMessage?.({ type: MESSAGE_TYPES.DIGEST_STATUS, text });
+}
+
+async function runDigestFollowUp({ question, results, settings, notePath }) {
+  sendDigestStatus("digest を生成しています...");
+
+  const digestResult = await digestService.generateDigest({
+    question,
+    results,
+    settings,
+    fetchImpl: fetch
+  });
+
+  if (!digestResult.ok) {
+    const failureText = digestService.buildDigestFailureText(digestResult.error);
+    const updateFailure = await obsidianStorage.updateDigestInObsidian(notePath, failureText, settings);
+    if (!updateFailure.ok) {
+      sendDigestStatus("digest の生成と書き戻しに失敗しました。");
+      console.error("MirrorChat digest update error:", updateFailure.error);
+      return;
+    }
+    sendDigestStatus("digest の生成に失敗しました。ファイルに失敗状態を反映しました。");
+    return;
+  }
+
+  const updateResult = await obsidianStorage.updateDigestInObsidian(notePath, digestResult.digest, settings);
+  if (!updateResult.ok) {
+    sendDigestStatus("digest の生成には成功しましたが、Obsidian への反映に失敗しました。");
+    console.error("MirrorChat digest save error:", updateResult.error);
+    return;
+  }
+
+  sendDigestStatus(`digest を反映しました。使用モデル: ${digestResult.modelId}`);
+}
 
 function resolveEnabledAIs(rawEnabledAIs) {
   if (typeof rawEnabledAIs === "undefined") return [...AI_KEYS];
@@ -138,6 +178,18 @@ async function runTask(task) {
     } catch (e) {
       console.warn("MirrorChat: CURRENT_TASK_KEY の削除に失敗しました:", e);
     }
+  }
+
+  if (saveResult.ok && digestService.isDigestEnabled(settings) && saveResult.notePath) {
+    runDigestFollowUp({
+      question: task.prompt,
+      results,
+      settings,
+      notePath: saveResult.notePath
+    }).catch((error) => {
+      sendDigestStatus("digest の生成に失敗しました。");
+      console.error("MirrorChat digest follow-up error:", error);
+    });
   }
 
   chrome.runtime.sendMessage?.({ type: MESSAGE_TYPES.DONE, saveFailed });

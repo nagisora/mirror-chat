@@ -3,6 +3,8 @@
   const FOLDER_SEQ_KEY = STORAGE_KEYS.FOLDER_SEQ;
   const LAST_SAVED_FOLDER_KEY = STORAGE_KEYS.LAST_SAVED_FOLDER;
   const QUESTION_FILE_SEQ_KEY = STORAGE_KEYS.QUESTION_FILE_SEQ;
+  const DIGEST_PENDING_TEXT = "生成中...";
+  const DIGEST_DISABLED_TEXT = "未生成";
 
   function getQuestionExcerpt(text) {
     const cleaned = String(text)
@@ -61,8 +63,41 @@
     return parts.join("---\n\n");
   }
 
-  function buildQuestionAnswersContent(question, results) {
-    return `## 質問\n\n${question}\n\n---\n\n${buildAnswerSections(results)}`;
+  function buildInitialDigestText(settings) {
+    return settings.openrouter?.enableDigest ? DIGEST_PENDING_TEXT : DIGEST_DISABLED_TEXT;
+  }
+
+  function buildQuestionAnswersContent(question, results, settings) {
+    return [
+      "## 質問",
+      "",
+      question,
+      "",
+      "## まとめ",
+      "",
+      buildInitialDigestText(settings),
+      "",
+      buildAnswerSections(results)
+    ].join("\n");
+  }
+
+  function replaceDigestSection(content, digestText) {
+    const startMarker = "## まとめ\n\n";
+    const start = content.indexOf(startMarker);
+    if (start === -1) {
+      return {
+        ok: false,
+        error: "まとめセクションが見つかりませんでした"
+      };
+    }
+
+    const digestStart = start + startMarker.length;
+    const nextSection = content.indexOf("\n## ", digestStart);
+    const digestEnd = nextSection === -1 ? content.length : nextSection;
+    return {
+      ok: true,
+      content: `${content.slice(0, digestStart)}${digestText}${content.slice(digestEnd)}`
+    };
   }
 
   async function saveToObsidian(question, results, settings) {
@@ -77,8 +112,9 @@
 
     const questionSeq = await getNextQuestionFileSeq(basePath);
     const fileName = getQuestionFileName(question, questionSeq);
-    const content = buildQuestionAnswersContent(question, results);
-    const res = await self.ObsidianClient.createNote(baseUrl, token, `${basePath}/${fileName}`, content);
+    const notePath = `${basePath}/${fileName}`;
+    const content = buildQuestionAnswersContent(question, results, settings);
+    const res = await self.ObsidianClient.createNote(baseUrl, token, notePath, content);
     if (!res.ok) {
       return { ok: false, error: res.error, payload: { question, results, basePath } };
     }
@@ -86,7 +122,7 @@
     await new Promise((resolve) =>
       chrome.storage.local.set({ [LAST_SAVED_FOLDER_KEY]: basePath }, resolve)
     );
-    return { ok: true };
+    return { ok: true, basePath, fileName, notePath };
   }
 
   async function appendToObsidian(basePath, question, results, settings) {
@@ -98,10 +134,36 @@
 
     const questionSeq = await getNextQuestionFileSeq(basePath);
     const fileName = getQuestionFileName(question, questionSeq);
-    const content = buildQuestionAnswersContent(question, results);
-    const res = await self.ObsidianClient.createNote(baseUrl, token, `${basePath}/${fileName}`, content);
+    const notePath = `${basePath}/${fileName}`;
+    const content = buildQuestionAnswersContent(question, results, settings);
+    const res = await self.ObsidianClient.createNote(baseUrl, token, notePath, content);
     if (!res.ok) {
       return { ok: false, error: res.error };
+    }
+
+    return { ok: true, basePath, fileName, notePath };
+  }
+
+  async function updateDigestInObsidian(notePath, digestText, settings) {
+    const { baseUrl, token } = settings.obsidian || {};
+
+    if (!baseUrl) {
+      return { ok: false, error: "ObsidianのベースURLが設定されていません" };
+    }
+
+    const getRes = await self.ObsidianClient.getNote(baseUrl, token, notePath);
+    if (!getRes.ok) {
+      return { ok: false, error: getRes.error };
+    }
+
+    const replaced = replaceDigestSection(getRes.content || "", digestText);
+    if (!replaced.ok) {
+      return { ok: false, error: replaced.error };
+    }
+
+    const saveRes = await self.ObsidianClient.createNote(baseUrl, token, notePath, replaced.content);
+    if (!saveRes.ok) {
+      return { ok: false, error: saveRes.error };
     }
 
     return { ok: true };
@@ -109,6 +171,8 @@
 
   self.MirrorChatObsidianStorage = {
     saveToObsidian,
-    appendToObsidian
+    appendToObsidian,
+    updateDigestInObsidian,
+    replaceDigestSection
   };
 })();

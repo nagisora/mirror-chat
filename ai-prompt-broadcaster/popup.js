@@ -24,6 +24,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const openTabsButton = document.getElementById("open-tabs-button");
   const closeTabsButton = document.getElementById("close-tabs-button");
   const status = document.getElementById("status");
+  const digestStatus = document.getElementById("digest-status");
   const retrySection = document.getElementById("retry-section");
   const retryButton = document.getElementById("retry-button");
   const resaveButton = document.getElementById("resave-button");
@@ -41,6 +42,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const MSG_FETCH = MESSAGE_TYPES.FETCH || "MIRRORCHAT_FETCH";
   const MSG_RETRY = MESSAGE_TYPES.RETRY || "MIRRORCHAT_RETRY";
   const MSG_STATUS = MESSAGE_TYPES.STATUS || "MIRRORCHAT_STATUS";
+  const MSG_DIGEST_STATUS = MESSAGE_TYPES.DIGEST_STATUS || "MIRRORCHAT_DIGEST_STATUS";
   const MSG_AI_STATUS = MESSAGE_TYPES.AI_STATUS || "MIRRORCHAT_AI_STATUS";
   const MSG_DONE = MESSAGE_TYPES.DONE || "MIRRORCHAT_DONE";
 
@@ -61,6 +63,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const appState = {
     statusText: "",
+    digestStatusText: "",
     openTabs: {},
     aiStates: Object.fromEntries(AI_KEYS.map((key) => [key, ""])),
     enabledAIs: getDefaultEnabledAIs(),
@@ -103,6 +106,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     retryButton.disabled = !appState.hasFailedItems || appState.busyAction === "retrying";
     resaveButton.disabled = !appState.hasFailedItems || appState.busyAction === "retrying";
     status.textContent = appState.statusText;
+    digestStatus.textContent = appState.digestStatusText;
   }
 
   async function readLocalStorage(key) {
@@ -207,6 +211,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       hasPendingQuestion: true,
       allowCollect: true,
       aiStates: nextAiStates,
+      digestStatusText: "",
       statusText: isFollowUp
         ? "続きの質問を送信中...各AIの既存会話に追加されます。回答生成完了後に「回答を取得」を押してください。"
         : "送信中...各AIに質問を送っています。回答生成完了後に「回答を取得」を押してください。"
@@ -307,6 +312,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === MSG_STATUS) {
       setState({ statusText: msg.text || "" });
+      return;
+    }
+    if (msg.type === MSG_DIGEST_STATUS) {
+      setState({ digestStatusText: msg.text || "" });
       return;
     }
     if (msg.type === MSG_AI_STATUS) {

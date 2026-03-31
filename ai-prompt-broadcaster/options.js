@@ -2,6 +2,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   const baseUrlInput = document.getElementById("obsidian-base-url");
   const tokenInput = document.getElementById("obsidian-token");
   const rootPathInput = document.getElementById("obsidian-root-path");
+  const openRouterEnableDigestInput = document.getElementById("openrouter-enable-digest");
+  const openRouterApiKeyInput = document.getElementById("openrouter-api-key");
+  const openRouterPreferredModelInput = document.getElementById("openrouter-preferred-model");
   const saveButton = document.getElementById("save-button");
   const status = document.getElementById("status");
 
@@ -15,6 +18,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     baseUrlInput.value = settings.obsidian.baseUrl || "";
     tokenInput.value = settings.obsidian.token || "";
     rootPathInput.value = settings.obsidian.rootPath || "";
+    openRouterEnableDigestInput.checked = !!settings.openrouter?.enableDigest;
+    openRouterApiKeyInput.value = settings.openrouter?.apiKey || "";
+    openRouterPreferredModelInput.value = settings.openrouter?.preferredModel || "";
 
     document
       .querySelectorAll(".ai-config")
@@ -43,6 +49,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         baseUrl: baseUrlInput.value.trim(),
         token: tokenInput.value.trim(),
         rootPath: rootPathInput.value.trim()
+      },
+      openrouter: {
+        enableDigest: !!openRouterEnableDigestInput.checked,
+        apiKey: openRouterApiKeyInput.value.trim(),
+        preferredModel: openRouterPreferredModelInput.value.trim() || null
       },
       aiConfigs: {}
     };
