@@ -5,8 +5,6 @@
   const QUESTION_FILE_SEQ_KEY = STORAGE_KEYS.QUESTION_FILE_SEQ;
   const DIGEST_PENDING_TEXT = "生成中...";
   const DIGEST_DISABLED_TEXT = "未生成";
-  const DIGEST_START_MARKER = "<!-- MIRRORCHAT_DIGEST_START -->";
-  const DIGEST_END_MARKER = "<!-- MIRRORCHAT_DIGEST_END -->";
 
   function getQuestionExcerpt(text) {
     const cleaned = String(text)
@@ -79,9 +77,7 @@
       "",
       "## まとめ",
       "",
-      DIGEST_START_MARKER,
       buildInitialDigestText(settings),
-      DIGEST_END_MARKER,
       "",
       "---",
       "",
@@ -92,13 +88,14 @@
   }
 
   function replaceDigestSection(content, digestText) {
-    const markerBlock = `${DIGEST_START_MARKER}\n`;
-    const start = content.indexOf(markerBlock);
-    const end = content.indexOf(`\n${DIGEST_END_MARKER}`, start);
-    if (start !== -1 && end !== -1 && end >= start) {
+    const legacyStartMarker = "<!-- MIRRORCHAT_DIGEST_START -->\n";
+    const legacyEndMarker = "\n<!-- MIRRORCHAT_DIGEST_END -->";
+    const legacyStart = content.indexOf(legacyStartMarker);
+    const legacyEnd = content.indexOf(legacyEndMarker, legacyStart);
+    if (legacyStart !== -1 && legacyEnd !== -1 && legacyEnd >= legacyStart) {
       return {
         ok: true,
-        content: `${content.slice(0, start + markerBlock.length)}${digestText}${content.slice(end)}`
+        content: `${content.slice(0, legacyStart)}${digestText}${content.slice(legacyEnd + legacyEndMarker.length)}`
       };
     }
 
@@ -112,7 +109,7 @@
     }
 
     const digestStart = fallbackStart + startMarker.length;
-    const nextSection = content.indexOf("\n## ", digestStart);
+    const nextSection = content.indexOf("\n\n---\n\n## 各AI回答", digestStart);
     const digestEnd = nextSection === -1 ? content.length : nextSection;
     return {
       ok: true,

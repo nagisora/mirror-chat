@@ -45,9 +45,7 @@ test("replaceDigestSection keeps ChatGPT answer block intact", async () => {
     "",
     "## まとめ",
     "",
-    "<!-- MIRRORCHAT_DIGEST_START -->",
     "生成中...",
-    "<!-- MIRRORCHAT_DIGEST_END -->",
     "",
     "---",
     "",
@@ -64,10 +62,12 @@ test("replaceDigestSection keeps ChatGPT answer block intact", async () => {
     "Claude の回答"
   ].join("\n");
 
-  const replaced = storage.replaceDigestSection(original, "> 要約モデル: openrouter/test\n\n要約本文");
+  const replaced = storage.replaceDigestSection(original, "要約本文\n\n<sub>要約モデル: openrouter/test</sub>");
 
   assert.equal(replaced.ok, true);
   assert.match(replaced.content, /### ChatGPT\n\nChatGPT の回答/);
   assert.match(replaced.content, /### Claude\n\nClaude の回答/);
   assert.match(replaced.content, /要約モデル: openrouter\/test/);
+  assert.ok(!replaced.content.includes("MIRRORCHAT_DIGEST_START"));
+  assert.ok(!replaced.content.includes("MIRRORCHAT_DIGEST_END"));
 });

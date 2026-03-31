@@ -42,7 +42,7 @@ test("generateDigest falls back to next candidate when first one fails", async (
     }
     return new Response(
       JSON.stringify({
-        choices: [{ message: { content: "### 共通点\n- 要点" } }]
+        choices: [{ message: { content: "### 要点3行\n- 要点\n- 要点2\n- 要点3" } }]
       }),
       { status: 200, headers: { "content-type": "application/json" } }
     );
@@ -71,5 +71,6 @@ test("generateDigest falls back to next candidate when first one fails", async (
 
   assert.equal(result.ok, true);
   assert.equal(result.modelId, "b/model:free");
-  assert.match(result.digest, /共通点/);
+  assert.match(result.digest, /要点3行/);
+  assert.match(result.digest, /<sub>要約モデル: openrouter\/b\/model:free<\/sub>/);
 });
