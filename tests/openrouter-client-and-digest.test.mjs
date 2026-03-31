@@ -134,3 +134,27 @@ test("generateDigest reports timeout fallback progress", async () => {
   assert.match(progressEvents[2].errorMessage, /timeout\/model:free/);
   assert.match(progressEvents[2].errorMessage, /15 秒以内/);
 });
+
+test("buildDigestPrompt compacts long source text", async () => {
+  const context = await loadScripts(
+    [
+      "./ai-prompt-broadcaster/openRouterFreeModels.js",
+      "./ai-prompt-broadcaster/openRouterClient.js",
+      "./ai-prompt-broadcaster/digestService.js"
+    ],
+    { fetch: async () => new Response("{}", { status: 200, headers: { "content-type": "application/json" } }) }
+  );
+  const digestService = context.self.MirrorChatDigestService;
+
+  const longQuestion = "Q".repeat(1400);
+  const longAnswer = `前半${"A".repeat(3800)}後半`;
+  const prompt = digestService.buildDigestPrompt(longQuestion, [
+    { name: "ChatGPT", markdown: longAnswer, error: "" },
+    { name: "Claude", markdown: "", error: "タイムアウト" }
+  ]);
+
+  assert.match(prompt.systemPrompt, /読書メモ/);
+  assert.match(prompt.userPrompt, /\[中略: /);
+  assert.match(prompt.userPrompt, /理由: タイムアウト/);
+  assert.match(prompt.userPrompt, /後半/);
+});

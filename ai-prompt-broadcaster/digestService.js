@@ -2,6 +2,8 @@
   const openRouterClient = self.MirrorChatOpenRouterClient;
   const freeModelSelector = self.MirrorChatOpenRouterFreeModels;
   const DIGEST_MODEL_TIMEOUT_MS = 15000;
+  const MAX_DIGEST_QUESTION_CHARS = 1200;
+  const MAX_DIGEST_ANSWER_CHARS = 3500;
 
   function summarizeAttemptError({ modelId, kind, message }) {
     if (kind === "timeout") {
@@ -20,6 +22,38 @@
     return `生成に失敗しました。\n\n${String(message || "Unknown error")}`;
   }
 
+  function normalizeDigestSourceText(text) {
+    return String(text || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  function compactDigestSourceText(text, maxChars) {
+    const normalized = normalizeDigestSourceText(text);
+    if (!normalized) return "";
+    if (normalized.length <= maxChars) return normalized;
+
+    const headLength = Math.max(0, Math.floor(maxChars * 0.72));
+    const tailLength = Math.max(0, maxChars - headLength - 24);
+    const head = normalized.slice(0, headLength).trimEnd();
+    const tail = tailLength > 0 ? normalized.slice(-tailLength).trimStart() : "";
+    const omitted = normalized.length - head.length - tail.length;
+    return tail
+      ? `${head}\n\n[中略: ${omitted} 文字]\n\n${tail}`
+      : `${head}\n\n[中略: ${omitted} 文字]`;
+  }
+
+  function buildDigestSourceBlock(result) {
+    const name = String(result?.name || "AI");
+    const markdown = compactDigestSourceText(result?.markdown, MAX_DIGEST_ANSWER_CHARS);
+    if (markdown) {
+      return `### ${name}\n${markdown}`;
+    }
+    const errorText = normalizeDigestSourceText(result?.error);
+    return `### ${name}\n(取得できませんでした)${errorText ? `\n理由: ${errorText}` : ""}`;
+  }
+
   function buildDigestBody({ digestMarkdown, modelId }) {
     return [
       digestMarkdown,
@@ -29,33 +63,20 @@
   }
 
   function buildDigestPrompt(question, results) {
-    const answerBlocks = results
-      .map(({ name, markdown, error }) => {
-        const body = markdown && markdown.trim() ? markdown.trim() : "(取得できませんでした)";
-        const errorLine = error ? `\n補足エラー: ${error}` : "";
-        return `### ${name}\n${body}${errorLine}`;
-      })
-      .join("\n\n");
+    const compactQuestion = compactDigestSourceText(question, MAX_DIGEST_QUESTION_CHARS);
+    const answerBlocks = results.map((result) => buildDigestSourceBlock(result)).join("\n\n");
 
     return {
       systemPrompt: [
-        "あなたは複数のAI回答を比較して、日本語で読みやすい読書メモ型の digest を作成する編集者です。",
-        "専門用語を詰め込みすぎず、後から Obsidian で見返して理解しやすい形で要点を整理してください。",
-        "出力は Markdown のみで、次の見出しだけを使ってください。",
-        "### 補足",
-        "### 気になる点"
+        "複数AI回答を、読み返しやすい日本語の読書メモに要約してください。Markdownのみで出力してください。",
+        "冒頭は見出しなしの箇条書き3つ、その後は ### 補足 と ### 気になる点 だけを使ってください。",
+        "AI比較やモデル評価は書かず、不確かな点は ### 気になる点 に入れてください。"
       ].join("\n"),
       userPrompt: [
-        "次の質問と各AI回答を要約してください。",
-        "形式は読書メモ型にしてください。",
-        "冒頭は見出しを付けず、3 個の箇条書きだけを書いてください。",
-        "### 補足 は重要な背景や補助説明を 2-4 個の箇条書きで書いてください。",
-        "AIごとの評価や、どのAIが参考になったかという段落は作らないでください。",
-        "### 気になる点 は曖昧さ、未確認事項、次に確かめるべき点を書いてください。",
-        "断定しきれない内容は 気になる点 に回してください。",
+        "次を要約してください。",
         "",
         "## 質問",
-        question,
+        compactQuestion,
         "",
         "## 各AI回答",
         answerBlocks
