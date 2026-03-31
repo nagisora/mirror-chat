@@ -156,23 +156,25 @@ button:disabled {
 }
 
 #resave-button {
-  background: #ea580c;
-  color: #fff;
-  border-color: #ea580c;
+  background: #fff;
+  color: #0f172a;
+  border-color: #cbd5e1;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
 }
 
 #resave-button:hover:not(:disabled) {
-  background: #c2410c;
+  background: #f8fafc;
 }
 
 #regenerate-digest-button {
-  background: #0f766e;
-  color: #fff;
-  border-color: #0f766e;
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
 }
 
 #regenerate-digest-button:hover:not(:disabled) {
-  background: #115e59;
+  background: #f1f5f9;
 }
 
 .link {
@@ -187,8 +189,30 @@ button:disabled {
   min-height: 16px;
 }
 
+.status-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  justify-content: space-between;
+}
+
 #digest-status {
-  color: #555;
+  color: #475569;
+}
+
+#digest-status[data-tone="success"] {
+  color: #0f766e;
+}
+
+#digest-status[data-tone="error"] {
+  color: #475569;
+}
+
+.status-error {
+  color: #dc2626;
+  text-align: right;
+  flex: 1;
+  min-width: 0;
 }
 
 .retry-section {

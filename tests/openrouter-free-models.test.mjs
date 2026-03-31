@@ -24,9 +24,17 @@ test("tryCandidates falls back after noProviders error", async () => {
   const context = await loadScript("./ai-prompt-broadcaster/openRouterFreeModels.js");
   const models = context.self.MirrorChatOpenRouterFreeModels;
   const seen = [];
+  const started = [];
+  const failed = [];
 
   const result = await models.tryCandidates({
     candidates: ["a/model:free", "b/model:free"],
+    onAttemptStart: async ({ modelId }) => {
+      started.push(modelId);
+    },
+    onAttemptFailure: async ({ modelId, kind }) => {
+      failed.push(`${modelId}:${kind}`);
+    },
     attempt: async (modelId) => {
       seen.push(modelId);
       if (modelId === "a/model:free") {
@@ -39,6 +47,8 @@ test("tryCandidates falls back after noProviders error", async () => {
   assert.equal(result.ok, true);
   assert.equal(result.modelId, "b/model:free");
   assert.deepEqual(seen, ["a/model:free", "b/model:free"]);
+  assert.deepEqual(started, ["a/model:free", "b/model:free"]);
+  assert.deepEqual(failed, ["a/model:free:noProviders"]);
   assert.equal(result.attempts[0].kind, "noProviders");
 });
 

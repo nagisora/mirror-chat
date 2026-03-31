@@ -135,13 +135,16 @@
     };
   }
 
-  async function tryCandidates({ preferredModel, candidates, attempt }) {
+  async function tryCandidates({ preferredModel, candidates, attempt, onAttemptStart, onAttemptFailure }) {
     const orderedCandidates = buildCandidateList({ preferredModel, candidates });
     const attempts = [];
     let lastError = null;
 
     for (const modelId of orderedCandidates) {
       try {
+        if (typeof onAttemptStart === "function") {
+          await onAttemptStart({ modelId, attempts: attempts.slice() });
+        }
         const value = await attempt(modelId);
         if (!String(value || "").trim()) {
           throw new Error("OpenRouter response was empty");
@@ -154,11 +157,15 @@
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error || "Unknown error");
-        attempts.push({
+        const failure = {
           modelId,
           kind: classifyOpenRouterError(error),
           error: message
-        });
+        };
+        attempts.push(failure);
+        if (typeof onAttemptFailure === "function") {
+          await onAttemptFailure({ ...failure, attempts: attempts.slice() });
+        }
         lastError = error;
       }
     }

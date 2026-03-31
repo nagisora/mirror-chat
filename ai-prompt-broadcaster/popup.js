@@ -25,6 +25,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const closeTabsButton = document.getElementById("close-tabs-button");
   const status = document.getElementById("status");
   const digestStatus = document.getElementById("digest-status");
+  const digestStatusText = document.getElementById("digest-status-text");
+  const digestStatusError = document.getElementById("digest-status-error");
   const retrySection = document.getElementById("retry-section");
   const retryButton = document.getElementById("retry-button");
   const resaveButton = document.getElementById("resave-button");
@@ -70,6 +72,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const appState = {
     statusText: "",
     digestStatusText: "",
+    digestStatusError: "",
+    digestStatusTone: "info",
     openTabs: {},
     aiStates: Object.fromEntries(AI_KEYS.map((key) => [key, ""])),
     enabledAIs: getDefaultEnabledAIs(),
@@ -145,7 +149,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     regenerateDigestButton.disabled = !appState.hasLastSavedNote || appState.busyAction === "regenerating-digest";
     digestModelSelect.disabled = !appState.hasLastSavedNote || appState.busyAction === "regenerating-digest";
     status.textContent = appState.statusText;
-    digestStatus.textContent = appState.digestStatusText;
+    digestStatus.dataset.tone = appState.digestStatusTone || "info";
+    digestStatusText.textContent = appState.digestStatusText;
+    digestStatusError.textContent = appState.digestStatusError;
   }
 
   async function readLocalStorage(key) {
@@ -261,6 +267,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       allowCollect: true,
       aiStates: nextAiStates,
       digestStatusText: "",
+      digestStatusError: "",
+      digestStatusTone: "info",
       statusText: isFollowUp
         ? "続きの質問を送信中...各AIの既存会話に追加されます。回答生成完了後に「回答を取得」を押してください。"
         : "送信中...各AIに質問を送っています。回答生成完了後に「回答を取得」を押してください。"
@@ -372,24 +380,35 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function doRegenerateDigest() {
-    setState({ busyAction: "regenerating-digest", digestStatusText: "digest を再生成しています..." });
+    setState({
+      busyAction: "regenerating-digest",
+      digestStatusText: "digest を再生成しています...",
+      digestStatusError: "",
+      digestStatusTone: "info"
+    });
     chrome.runtime.sendMessage(
       { type: MSG_REGENERATE_DIGEST, modelId: digestModelSelect.value },
       async (resp) => {
         if (chrome.runtime.lastError) {
           setState({
             busyAction: "",
-            digestStatusText: "digest の再生成に失敗しました: " + chrome.runtime.lastError.message
+            digestStatusText: "digest の再生成に失敗しました。",
+            digestStatusError: chrome.runtime.lastError.message,
+            digestStatusTone: "error"
           });
         } else if (!resp?.ok) {
           setState({
             busyAction: "",
-            digestStatusText: "digest の再生成に失敗しました: " + (resp?.error || "不明なエラー")
+            digestStatusText: "digest の再生成に失敗しました。",
+            digestStatusError: resp?.error || "不明なエラー",
+            digestStatusTone: "error"
           });
         } else {
           setState({
             busyAction: "",
-            digestStatusText: "digest の再生成を開始しました。"
+            digestStatusText: "digest の再生成を開始しました。",
+            digestStatusError: "",
+            digestStatusTone: "info"
           });
         }
         await syncLastSavedNoteState();
@@ -419,7 +438,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
     if (msg.type === MSG_DIGEST_STATUS) {
-      setState({ digestStatusText: msg.text || "" });
+      setState({
+        digestStatusText: msg.text || "",
+        digestStatusError: msg.errorText || "",
+        digestStatusTone: msg.tone || "info"
+      });
       return;
     }
     if (msg.type === MSG_AI_STATUS) {

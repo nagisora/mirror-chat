@@ -38,8 +38,13 @@ const tabManager = self.MirrorChatTabManager;
 const aiCommunication = self.MirrorChatAICommunication;
 const digestService = self.MirrorChatDigestService;
 
-function sendDigestStatus(text) {
-  chrome.runtime.sendMessage?.({ type: MESSAGE_TYPES.DIGEST_STATUS, text });
+function sendDigestStatus(text, options = {}) {
+  chrome.runtime.sendMessage?.({
+    type: MESSAGE_TYPES.DIGEST_STATUS,
+    text,
+    errorText: options.errorText || "",
+    tone: options.tone || "info"
+  });
 }
 
 async function readLastNoteSnapshot() {
@@ -57,13 +62,29 @@ async function writeLastNoteSnapshot(snapshot) {
 }
 
 async function runDigestFollowUp({ question, results, settings, notePath }) {
-  sendDigestStatus("digest を生成しています...");
+  sendDigestStatus("digest を生成しています...", { tone: "info" });
 
   const digestResult = await digestService.generateDigest({
     question,
     results,
     settings,
-    fetchImpl: fetch
+    fetchImpl: fetch,
+    onProgress: async (progress) => {
+      if (!progress) return;
+      if (progress.stage === "attempt-start") {
+        sendDigestStatus(progress.message || "digest を生成しています...", {
+          tone: "info",
+          errorText: progress.errorMessage || ""
+        });
+        return;
+      }
+      if (progress.stage === "attempt-failure") {
+        sendDigestStatus(progress.message || "digest を生成しています...", {
+          tone: "error",
+          errorText: progress.errorMessage || progress.error || "不明なエラー"
+        });
+      }
+    }
   });
 
   if (Array.isArray(digestResult.refreshedCandidates) && digestResult.refreshedCandidates.length > 0) {
@@ -83,22 +104,31 @@ async function runDigestFollowUp({ question, results, settings, notePath }) {
     const failureText = digestService.buildDigestFailureText(digestResult.error);
     const updateFailure = await obsidianStorage.updateDigestInObsidian(notePath, failureText, settings);
     if (!updateFailure.ok) {
-      sendDigestStatus("digest の生成と書き戻しに失敗しました。");
+      sendDigestStatus("digest の生成と書き戻しに失敗しました。", {
+        tone: "error",
+        errorText: updateFailure.error || digestResult.error || "不明なエラー"
+      });
       console.error("MirrorChat digest update error:", updateFailure.error);
       return;
     }
-    sendDigestStatus("digest の生成に失敗しました。ファイルに失敗状態を反映しました。");
+    sendDigestStatus("digest の生成に失敗しました。ファイルに失敗状態を反映しました。", {
+      tone: "error",
+      errorText: digestResult.error || "不明なエラー"
+    });
     return;
   }
 
   const updateResult = await obsidianStorage.updateDigestInObsidian(notePath, digestResult.digest, settings);
   if (!updateResult.ok) {
-    sendDigestStatus("digest の生成には成功しましたが、Obsidian への反映に失敗しました。");
+    sendDigestStatus("digest の生成には成功しましたが、Obsidian への反映に失敗しました。", {
+      tone: "error",
+      errorText: updateResult.error || "不明なエラー"
+    });
     console.error("MirrorChat digest save error:", updateResult.error);
     return;
   }
 
-  sendDigestStatus(`digest を反映しました。使用モデル: ${digestResult.modelId}`);
+  sendDigestStatus(`digest を反映しました。使用モデル: ${digestResult.modelId}`, { tone: "success" });
 }
 
 function resolveEnabledAIs(rawEnabledAIs) {
@@ -442,7 +472,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             settings,
             notePath: snapshot.notePath
           }).catch((error) => {
-            sendDigestStatus("digest の再生成に失敗しました。");
+            sendDigestStatus("digest の再生成に失敗しました。", {
+              tone: "error",
+              errorText: error?.message || String(error)
+            });
             console.error("MirrorChat digest follow-up error:", error);
           });
         }
@@ -479,7 +512,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           settings: digestSettings,
           notePath: snapshot.notePath
         }).catch((error) => {
-          sendDigestStatus("digest の再生成に失敗しました。");
+          sendDigestStatus("digest の再生成に失敗しました。", {
+            tone: "error",
+            errorText: error?.message || String(error)
+          });
           console.error("MirrorChat digest regeneration error:", error);
         });
 

@@ -52,7 +52,10 @@
         <span>既存の会話に続けて送信</span>
       </label>
       <p id="status" class="status" aria-live="polite"></p>
-      <p id="digest-status" class="status" aria-live="polite"></p>
+      <div id="digest-status" class="status status-row" aria-live="polite">
+        <span id="digest-status-text"></span>
+        <span id="digest-status-error" class="status-error"></span>
+      </div>
       <hr class="section-divider" />
       <div class="actions secondary-actions digest-actions">
         <button id="resave-button" disabled>再保存</button>

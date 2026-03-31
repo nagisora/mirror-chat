@@ -1,6 +1,16 @@
 (function () {
   const openRouterClient = self.MirrorChatOpenRouterClient;
   const freeModelSelector = self.MirrorChatOpenRouterFreeModels;
+  const DIGEST_MODEL_TIMEOUT_MS = 15000;
+
+  function summarizeAttemptError({ modelId, kind, message }) {
+    if (kind === "timeout") {
+      return `${modelId} が ${Math.round(DIGEST_MODEL_TIMEOUT_MS / 1000)} 秒以内に応答しませんでした。OpenRouter 側の応答待ちでタイムアウトしたため、別モデルへ切り替えます。`;
+    }
+    if (kind === "rateLimit") return `${modelId} はレート制限のため利用できません。別モデルへ切り替えます。`;
+    if (kind === "noProviders") return `${modelId} は利用可能な provider がありません。別モデルへ切り替えます。`;
+    return `${modelId} で失敗しました: ${String(message || "不明なエラー")}`;
+  }
 
   function isDigestEnabled(settings) {
     return !!settings?.openrouter?.enableDigest;
@@ -32,19 +42,17 @@
         "あなたは複数のAI回答を比較して、日本語で読みやすい読書メモ型の digest を作成する編集者です。",
         "専門用語を詰め込みすぎず、後から Obsidian で見返して理解しやすい形で要点を整理してください。",
         "出力は Markdown のみで、次の見出しだけを使ってください。",
-        "### 要点3行",
         "### 補足",
-        "### 参考になったAI",
-        "### 残課題"
+        "### 気になる点"
       ].join("\n"),
       userPrompt: [
         "次の質問と各AI回答を要約してください。",
         "形式は読書メモ型にしてください。",
-        "### 要点3行 は 3 個の箇条書きだけにしてください。",
+        "冒頭は見出しを付けず、3 個の箇条書きだけを書いてください。",
         "### 補足 は重要な背景や補助説明を 2-4 個の箇条書きで書いてください。",
-        "### 参考になったAI は、どのAIがどの観点で役立ったかを簡潔に書いてください。複数あって構いません。",
-        "### 残課題 は曖昧さ、未確認事項、次に確かめるべき点を書いてください。",
-        "断定しきれない内容は 残課題 に回してください。",
+        "AIごとの評価や、どのAIが参考になったかという段落は作らないでください。",
+        "### 気になる点 は曖昧さ、未確認事項、次に確かめるべき点を書いてください。",
+        "断定しきれない内容は 気になる点 に回してください。",
         "",
         "## 質問",
         question,
@@ -55,7 +63,7 @@
     };
   }
 
-  async function generateDigest({ question, results, settings, fetchImpl }) {
+  async function generateDigest({ question, results, settings, fetchImpl, onProgress }) {
     const apiKey = String(settings?.openrouter?.apiKey || "").trim();
     if (!apiKey) {
       return { ok: false, error: "OpenRouter API キーが設定されていません", attempts: [] };
@@ -79,12 +87,42 @@
     const selection = await freeModelSelector.tryCandidates({
       preferredModel: settings?.openrouter?.preferredModel,
       candidates: resolvedCandidates,
+      onAttemptStart: async ({ modelId, attempts }) => {
+        const previousFailure = Array.isArray(attempts) && attempts.length > 0 ? attempts[attempts.length - 1] : null;
+        if (typeof onProgress === "function") {
+          await onProgress({
+            stage: "attempt-start",
+            modelId,
+            message: `digest を生成しています... (${modelId})`,
+            errorMessage: previousFailure
+              ? summarizeAttemptError({
+                  modelId: previousFailure.modelId,
+                  kind: previousFailure.kind,
+                  message: previousFailure.error
+                })
+              : ""
+          });
+        }
+      },
+      onAttemptFailure: async ({ modelId, kind, error }) => {
+        if (typeof onProgress === "function") {
+          await onProgress({
+            stage: "attempt-failure",
+            modelId,
+            kind,
+            error,
+            message: `digest を生成しています... (${modelId})`,
+            errorMessage: summarizeAttemptError({ modelId, kind, message: error })
+          });
+        }
+      },
       attempt: async (modelId) =>
         openRouterClient.requestChatCompletion({
           apiKey,
           modelId,
           systemPrompt: prompt.systemPrompt,
           userPrompt: prompt.userPrompt,
+          timeoutMs: DIGEST_MODEL_TIMEOUT_MS,
           fetchImpl
         })
     });
