@@ -56,8 +56,14 @@ async function readLastNoteSnapshot() {
 }
 
 async function writeLastNoteSnapshot(snapshot) {
-  return new Promise((resolve) => {
-    chrome.storage.local.set({ [LAST_NOTE_SNAPSHOT_KEY]: snapshot }, resolve);
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set({ [LAST_NOTE_SNAPSHOT_KEY]: snapshot }, () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve();
+    });
   });
 }
 
@@ -71,6 +77,23 @@ async function runDigestFollowUp({ question, results, settings, notePath }) {
     fetchImpl: fetch,
     onProgress: async (progress) => {
       if (!progress) return;
+      if (progress.stage === "catalog-start") {
+        sendDigestStatus(progress.message || "digest の free候補を確認しています...", {
+          tone: "info",
+          errorText: ""
+        });
+        return;
+      }
+      if (progress.stage === "catalog-failure") {
+        sendDigestStatus(
+          progress.message || "free候補の取得に失敗したため、保存済み候補で digest を続行します。",
+          {
+            tone: "error",
+            errorText: progress.errorMessage || progress.error || "不明なエラー"
+          }
+        );
+        return;
+      }
       if (progress.stage === "attempt-start") {
         sendDigestStatus(progress.message || "digest を生成しています...", {
           tone: "info",
@@ -251,6 +274,9 @@ async function runTask(task) {
       });
     } catch (error) {
       console.warn("MirrorChat: 直近ノート情報の保存に失敗しました:", error);
+      aiCommunication.sendStatusText(
+        "保存は完了しましたが、直近ノート情報の保存に失敗しました。再保存/digest再生成が使えない場合があります。"
+      );
     }
   }
 

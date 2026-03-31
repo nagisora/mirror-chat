@@ -2,16 +2,27 @@
   const openRouterClient = self.MirrorChatOpenRouterClient;
   const freeModelSelector = self.MirrorChatOpenRouterFreeModels;
   const DIGEST_MODEL_TIMEOUT_MS = 15000;
+  const DIGEST_CATALOG_TIMEOUT_MS = 8000;
   const MAX_DIGEST_QUESTION_CHARS = 1200;
   const MAX_DIGEST_ANSWER_CHARS = 3500;
 
   function summarizeAttemptError({ modelId, kind, message }) {
     if (kind === "timeout") {
-      return `${modelId} が ${Math.round(DIGEST_MODEL_TIMEOUT_MS / 1000)} 秒以内に応答しませんでした。OpenRouter 側の応答待ちでタイムアウトしたため、別モデルへ切り替えます。`;
+      return `${modelId} が ${Math.round(DIGEST_MODEL_TIMEOUT_MS / 1000)} 秒以内に応答しませんでした。freeモデル上限や provider 混雑の可能性があるため、別モデルへ切り替えます。`;
     }
     if (kind === "rateLimit") return `${modelId} はレート制限のため利用できません。別モデルへ切り替えます。`;
     if (kind === "noProviders") return `${modelId} は利用可能な provider がありません。別モデルへ切り替えます。`;
     return `${modelId} で失敗しました: ${String(message || "不明なエラー")}`;
+  }
+
+  function summarizeCatalogError({ kind, message }) {
+    if (kind === "timeout") {
+      return `free候補取得が ${Math.round(DIGEST_CATALOG_TIMEOUT_MS / 1000)} 秒でタイムアウトしました。保存済み候補で続行します。`;
+    }
+    if (kind === "rateLimit") {
+      return "free候補取得がレート制限にかかりました。保存済み候補で続行します。";
+    }
+    return `free候補取得に失敗しました: ${String(message || "不明なエラー")}`;
   }
 
   function isDigestEnabled(settings) {
@@ -93,14 +104,38 @@
     let resolvedCandidates = settings?.openrouter?.freeModelCandidatesOverride;
     let refreshedCandidates = [];
     try {
-      const catalog = await openRouterClient.fetchModelsCatalog({ apiKey, fetchImpl });
+      if (typeof onProgress === "function") {
+        await onProgress({
+          stage: "catalog-start",
+          message: "digest の free候補を確認しています..."
+        });
+      }
+
+      const catalog = await openRouterClient.fetchModelsCatalog({
+        apiKey,
+        fetchImpl,
+        timeoutMs: DIGEST_CATALOG_TIMEOUT_MS
+      });
       const refreshed = freeModelSelector.refreshDigestFreeModels({
         catalog,
         preferredModel: settings?.openrouter?.preferredModel
       });
       resolvedCandidates = refreshed.candidates;
       refreshedCandidates = refreshed.candidates;
-    } catch {
+    } catch (error) {
+      const kind = freeModelSelector.classifyOpenRouterError(error);
+      if (typeof onProgress === "function") {
+        await onProgress({
+          stage: "catalog-failure",
+          kind,
+          error: error instanceof Error ? error.message : String(error || "Unknown error"),
+          message: "free候補の取得に失敗したため、保存済み候補で digest を続行します。",
+          errorMessage: summarizeCatalogError({
+            kind,
+            message: error instanceof Error ? error.message : String(error || "Unknown error")
+          })
+        });
+      }
       // catalog refresh failure should not block digest generation; fall back to stored/default candidates
     }
 
