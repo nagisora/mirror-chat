@@ -105,6 +105,7 @@ button {
 
 .diagnostic-actions {
   margin-top: 12px;
+  flex-wrap: wrap;
 }
 
 .log-output {

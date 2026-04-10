@@ -13,6 +13,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const openRouterRefreshMeta = document.getElementById("openrouter-refresh-meta");
   const openRouterTestModelInput = document.getElementById("openrouter-test-model");
   const openRouterTestButton = document.getElementById("openrouter-test-button");
+  const openRouterTestCopyButton = document.getElementById("openrouter-test-copy-button");
   const openRouterTestStatus = document.getElementById("openrouter-test-status");
   const openRouterTestLog = document.getElementById("openrouter-test-log");
   const saveButton = document.getElementById("save-button");
@@ -28,6 +29,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   function setOpenRouterTestStatus(text, tone = "info") {
     openRouterTestStatus.textContent = text;
     openRouterTestStatus.dataset.tone = tone;
+  }
+
+  function setOpenRouterTestButtonsDisabled(disabled) {
+    openRouterTestButton.disabled = disabled;
+    openRouterTestCopyButton.disabled = disabled;
   }
 
   function truncateText(text, maxLength = 240) {
@@ -117,7 +123,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       openRouterTestLog.scrollTop = openRouterTestLog.scrollHeight;
     };
 
-    openRouterTestButton.disabled = true;
+    setOpenRouterTestButtonsDisabled(true);
     setOpenRouterTestStatus("digest API をテスト中...", "info");
     openRouterTestLog.textContent = "";
 
@@ -226,7 +232,25 @@ document.addEventListener("DOMContentLoaded", async () => {
       setOpenRouterTestStatus("テスト実行中に予期しないエラーが発生しました。", "error");
       appendLog(`[致命的エラー] ${error instanceof Error ? error.stack || error.message : String(error)}`);
     } finally {
-      openRouterTestButton.disabled = false;
+      setOpenRouterTestButtonsDisabled(false);
+    }
+  }
+
+  async function copyOpenRouterDiagnosticLog() {
+    const text = openRouterTestLog.textContent || "";
+    if (!text.trim()) {
+      setOpenRouterTestStatus("コピーするログがありません。", "error");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setOpenRouterTestStatus("ログをクリップボードにコピーしました。", "success");
+    } catch (error) {
+      setOpenRouterTestStatus(
+        `ログのコピーに失敗しました: ${error instanceof Error ? error.message : String(error)}`,
+        "error"
+      );
     }
   }
 
@@ -278,6 +302,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     setOpenRouterTestStatus("", "info");
     openRouterTestLog.textContent = "";
     openRouterTestModelInput.value = "";
+    setOpenRouterTestButtonsDisabled(false);
 
     document
       .querySelectorAll(".ai-config")
@@ -397,7 +422,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     runOpenRouterDiagnostic().catch((error) => {
       setOpenRouterTestStatus("テスト実行に失敗しました。", "error");
       openRouterTestLog.textContent = error instanceof Error ? error.stack || error.message : String(error);
-      openRouterTestButton.disabled = false;
+      setOpenRouterTestButtonsDisabled(false);
+    });
+  });
+
+  openRouterTestCopyButton.addEventListener("click", () => {
+    copyOpenRouterDiagnosticLog().catch((error) => {
+      setOpenRouterTestStatus(
+        `ログのコピーに失敗しました: ${error instanceof Error ? error.message : String(error)}`,
+        "error"
+      );
     });
   });
 });
