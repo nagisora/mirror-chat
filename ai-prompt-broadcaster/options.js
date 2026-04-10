@@ -11,6 +11,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const openRouterRefreshButton = document.getElementById("openrouter-refresh-models-button");
   const openRouterRefreshStatus = document.getElementById("openrouter-refresh-status");
   const openRouterRefreshMeta = document.getElementById("openrouter-refresh-meta");
+  const openRouterTestModelInput = document.getElementById("openrouter-test-model");
+  const openRouterTestModelList = document.getElementById("openrouter-test-model-list");
   const openRouterTestButton = document.getElementById("openrouter-test-button");
   const openRouterTestStatus = document.getElementById("openrouter-test-status");
   const openRouterTestLog = document.getElementById("openrouter-test-log");
@@ -70,6 +72,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     return ordered.slice(0, OPENROUTER_TEST_ATTEMPT_LIMIT);
   }
 
+  function populateTestModelSuggestions(settings) {
+    const candidates = openRouterFreeModels.buildCandidateList({
+      preferredModel: settings?.openrouter?.preferredModel,
+      candidates: settings?.openrouter?.freeModelCandidatesOverride
+    });
+    openRouterTestModelList.innerHTML = "";
+    candidates.forEach((modelId) => {
+      const option = document.createElement("option");
+      option.value = modelId;
+      openRouterTestModelList.appendChild(option);
+    });
+  }
+
   async function runOpenRouterDiagnostic() {
     const settings = await storage.getSettings();
     const apiKey = openRouterApiKeyInput.value.trim() || settings.openrouter?.apiKey || "";
@@ -80,6 +95,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const preferredModel = openRouterPreferredModelInput.value.trim();
+    const requestedTestModel = openRouterTestModelInput.value.trim();
     const storedCandidates = Array.isArray(settings?.openrouter?.freeModelCandidatesOverride)
       ? settings.openrouter.freeModelCandidatesOverride
       : [];
@@ -97,36 +113,44 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     try {
       appendLog(`[開始] ${new Date().toLocaleString("ja-JP")}`);
-      appendLog(`[設定] preferredModel=${preferredModel || "(自動選択)"}`);
+      appendLog(
+        `[設定] preferredModel=${preferredModel || "(自動選択)"} / testModel=${requestedTestModel || "(自動候補順)"}`
+      );
       appendLog(
         `[リクエスト] timeout=${OPENROUTER_TEST_TIMEOUT_MS}ms / systemPrompt=${prompt.systemPrompt.length} chars / userPrompt=${prompt.userPrompt.length} chars`
       );
 
       let diagnosticCandidates = [];
-      try {
+      if (requestedTestModel) {
+        diagnosticCandidates = [requestedTestModel];
         appendLog("");
-        appendLog("[候補取得] /models を確認しています...");
-        const catalog = await openRouterClient.fetchModelsCatalog({
-          apiKey,
-          fetchImpl: fetch,
-          timeoutMs: 8000
-        });
-        const refreshed = openRouterFreeModels.refreshDigestFreeModels({
-          catalog,
-          preferredModel
-        });
-        diagnosticCandidates = buildCandidateListForDiagnostic({
-          preferredModel,
-          candidates: refreshed.candidates
-        });
-        appendLog(`[候補取得] 成功: catalog=${catalog.length}件 / 診断候補=${diagnosticCandidates.length}件`);
-      } catch (error) {
-        diagnosticCandidates = buildCandidateListForDiagnostic({
-          preferredModel,
-          candidates: storedCandidates
-        });
-        appendLog(`[候補取得] 失敗: ${error instanceof Error ? error.message : String(error)}`);
-        appendLog(`[候補取得] 保存済み/既定候補で続行: ${diagnosticCandidates.length}件`);
+        appendLog(`[候補指定] 手動指定モデルをテストします: ${requestedTestModel}`);
+      } else {
+        try {
+          appendLog("");
+          appendLog("[候補取得] /models を確認しています...");
+          const catalog = await openRouterClient.fetchModelsCatalog({
+            apiKey,
+            fetchImpl: fetch,
+            timeoutMs: 8000
+          });
+          const refreshed = openRouterFreeModels.refreshDigestFreeModels({
+            catalog,
+            preferredModel
+          });
+          diagnosticCandidates = buildCandidateListForDiagnostic({
+            preferredModel,
+            candidates: refreshed.candidates
+          });
+          appendLog(`[候補取得] 成功: catalog=${catalog.length}件 / 診断候補=${diagnosticCandidates.length}件`);
+        } catch (error) {
+          diagnosticCandidates = buildCandidateListForDiagnostic({
+            preferredModel,
+            candidates: storedCandidates
+          });
+          appendLog(`[候補取得] 失敗: ${error instanceof Error ? error.message : String(error)}`);
+          appendLog(`[候補取得] 保存済み/既定候補で続行: ${diagnosticCandidates.length}件`);
+        }
       }
 
       appendLog(`[候補順] ${diagnosticCandidates.join(", ")}`);
@@ -238,10 +262,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     openRouterEnableDigestInput.checked = !!settings.openrouter?.enableDigest;
     openRouterApiKeyInput.value = settings.openrouter?.apiKey || "";
     populatePreferredModelOptions(settings);
+    populateTestModelSuggestions(settings);
     openRouterRefreshMeta.textContent = formatRefreshMeta(settings.openrouter);
     openRouterRefreshStatus.textContent = "";
     setOpenRouterTestStatus("", "info");
     openRouterTestLog.textContent = "";
+    openRouterTestModelInput.value = "";
 
     document
       .querySelectorAll(".ai-config")
@@ -348,6 +374,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
       openRouterRefreshStatus.textContent = `free 候補を更新しました。${refreshed.candidates.length}件`;
       populatePreferredModelOptions(nextSettings);
+      populateTestModelSuggestions(nextSettings);
       openRouterRefreshMeta.textContent = formatRefreshMeta(nextSettings.openrouter);
     } catch (error) {
       openRouterRefreshStatus.textContent = `候補更新に失敗しました: ${error instanceof Error ? error.message : String(error)}`;
