@@ -12,7 +12,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   const openRouterRefreshStatus = document.getElementById("openrouter-refresh-status");
   const openRouterRefreshMeta = document.getElementById("openrouter-refresh-meta");
   const openRouterTestModelInput = document.getElementById("openrouter-test-model");
-  const openRouterTestModelList = document.getElementById("openrouter-test-model-list");
   const openRouterTestButton = document.getElementById("openrouter-test-button");
   const openRouterTestStatus = document.getElementById("openrouter-test-status");
   const openRouterTestLog = document.getElementById("openrouter-test-log");
@@ -77,12 +76,23 @@ document.addEventListener("DOMContentLoaded", async () => {
       preferredModel: settings?.openrouter?.preferredModel,
       candidates: settings?.openrouter?.freeModelCandidatesOverride
     });
-    openRouterTestModelList.innerHTML = "";
+    const currentValue = openRouterTestModelInput.value;
+    openRouterTestModelInput.innerHTML = "";
+
+    const autoOption = document.createElement("option");
+    autoOption.value = "";
+    autoOption.textContent = "自動候補順で診断";
+    openRouterTestModelInput.appendChild(autoOption);
+
     candidates.forEach((modelId) => {
       const option = document.createElement("option");
       option.value = modelId;
-      openRouterTestModelList.appendChild(option);
+      option.textContent = modelId;
+      openRouterTestModelInput.appendChild(option);
     });
+
+    const values = new Set(["", ...candidates]);
+    openRouterTestModelInput.value = values.has(currentValue) ? currentValue : "";
   }
 
   async function runOpenRouterDiagnostic() {
