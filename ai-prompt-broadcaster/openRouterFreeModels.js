@@ -41,6 +41,10 @@
     return [...DEFAULT_DIGEST_FREE_MODELS];
   }
 
+  function getCollectionPriorityModels() {
+    return [...COLLECTION_PRIORITY_MODELS];
+  }
+
   function getCollectionPriorityIndex(modelId) {
     return COLLECTION_PRIORITY_INDEX.has(modelId)
       ? COLLECTION_PRIORITY_INDEX.get(modelId)
@@ -55,8 +59,19 @@
     return normalizeCandidateList(preferred ? [preferred, ...base] : base);
   }
 
+  function buildKnownFreeModelList({ preferredModel, candidates } = {}) {
+    const preferred = String(preferredModel || "").trim();
+    const provided = Array.isArray(candidates) ? candidates : [];
+    return normalizeCandidateList([
+      preferred,
+      ...provided,
+      ...getCollectionPriorityModels(),
+      ...getDefaultDigestFreeModels()
+    ]);
+  }
+
   function buildSelectOptions({ preferredModel, candidates } = {}) {
-    const ordered = buildCandidateList({ preferredModel, candidates });
+    const ordered = buildKnownFreeModelList({ preferredModel, candidates });
     const options = [{ value: "", label: "自動選択（最新の free 候補から選ぶ）" }];
     for (const modelId of ordered) {
       options.push({ value: modelId, label: modelId });
@@ -135,7 +150,9 @@
     const digestCompatible = freeModels.filter((entry) => isDigestCompatibleModel(entry));
     const ageFiltered = digestCompatible.filter((entry) => {
       if (maxAgeMs <= 0) return true;
-      if (entry.createdAtMs === null) return false;
+      if (entry.createdAtMs === null) {
+        return Number.isFinite(entry.collectionPriority);
+      }
       const age = now - entry.createdAtMs;
       return age >= 0 && age <= maxAgeMs;
     });
@@ -215,8 +232,10 @@
   }
 
   self.MirrorChatOpenRouterFreeModels = {
+    getCollectionPriorityModels,
     getDefaultDigestFreeModels,
     buildCandidateList,
+    buildKnownFreeModelList,
     buildSelectOptions,
     classifyOpenRouterError,
     refreshDigestFreeModels,

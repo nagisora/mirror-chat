@@ -111,3 +111,30 @@ test("refreshDigestFreeModels excludes embed and vl models from digest candidate
   assert.equal(refreshed.stats.freeCount, 3);
   assert.equal(refreshed.stats.digestCompatibleCount, 1);
 });
+
+test("buildSelectOptions includes collection-ranked models even when not in stored candidates", async () => {
+  const context = await loadScript("./ai-prompt-broadcaster/openRouterFreeModels.js");
+  const models = context.self.MirrorChatOpenRouterFreeModels;
+
+  const options = models.buildSelectOptions({
+    candidates: ["meta-llama/llama-3.3-70b-instruct:free"]
+  });
+  const values = options.map((option) => option.value);
+
+  assert.ok(values.includes("z-ai/glm-4.5-air:free"));
+  assert.ok(values.includes("meta-llama/llama-3.3-70b-instruct:free"));
+});
+
+test("refreshDigestFreeModels keeps collection-ranked models when created date is missing", async () => {
+  const context = await loadScript("./ai-prompt-broadcaster/openRouterFreeModels.js");
+  const models = context.self.MirrorChatOpenRouterFreeModels;
+
+  const refreshed = models.refreshDigestFreeModels({
+    catalog: [
+      { id: "z-ai/glm-4.5-air:free", name: "GLM 4.5 Air" },
+      { id: "meta-llama/llama-3.3-70b-instruct:free", name: "Llama 3.3 70B" }
+    ]
+  });
+
+  assert.ok(Array.from(refreshed.candidates).includes("z-ai/glm-4.5-air:free"));
+});

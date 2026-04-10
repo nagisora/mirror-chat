@@ -78,7 +78,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function populateTestModelSuggestions(settings) {
-    const candidates = openRouterFreeModels.buildCandidateList({
+    const candidates = openRouterFreeModels.buildKnownFreeModelList({
       preferredModel: settings?.openrouter?.preferredModel,
       candidates: settings?.openrouter?.freeModelCandidatesOverride
     });
