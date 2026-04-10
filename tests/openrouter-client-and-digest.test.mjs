@@ -34,6 +34,63 @@ test("fetchModelsCatalog returns the models array", async () => {
   assert.deepEqual(result, [{ id: "a/model:free" }]);
 });
 
+test("requestChatCompletion surfaces provider error from a 200 response", async () => {
+  const fetchImpl = async () => new Response(
+    JSON.stringify({
+      choices: [{
+        finish_reason: "error",
+        message: { role: "assistant", content: null },
+        error: { code: 503, message: "Provider produced no final text" }
+      }]
+    }),
+    { status: 200, headers: { "content-type": "application/json" } }
+  );
+  const context = await loadScripts(["./ai-prompt-broadcaster/openRouterClient.js"], { fetch: fetchImpl });
+  const client = context.self.MirrorChatOpenRouterClient;
+
+  await assert.rejects(
+    client.requestChatCompletion({
+      apiKey: "test",
+      modelId: "provider/error:free",
+      systemPrompt: "system",
+      userPrompt: "user",
+      fetchImpl
+    }),
+    /OpenRouter provider error: Provider produced no final text/
+  );
+});
+
+test("requestChatCompletion reports reasoning-only completions", async () => {
+  const fetchImpl = async () => new Response(
+    JSON.stringify({
+      choices: [{
+        finish_reason: "length",
+        message: { role: "assistant", content: null, reasoning: "内部思考だけが返っている" }
+      }],
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 50,
+        total_tokens: 150,
+        completion_tokens_details: { reasoning_tokens: 50 }
+      }
+    }),
+    { status: 200, headers: { "content-type": "application/json" } }
+  );
+  const context = await loadScripts(["./ai-prompt-broadcaster/openRouterClient.js"], { fetch: fetchImpl });
+  const client = context.self.MirrorChatOpenRouterClient;
+
+  await assert.rejects(
+    client.requestChatCompletion({
+      apiKey: "test",
+      modelId: "reasoning/only:free",
+      systemPrompt: "system",
+      userPrompt: "user",
+      fetchImpl
+    }),
+    /OpenRouter returned reasoning without final text \(finish_reason: length\)/
+  );
+});
+
 test("generateDigest falls back to next candidate when first one fails", async () => {
   const nowSec = Math.floor(Date.now() / 1000);
   const fetchImpl = async (url, options) => {
@@ -97,6 +154,77 @@ test("generateDigest falls back to next candidate when first one fails", async (
   assert.match(result.digest, /^- 要点/m);
   assert.match(result.digest, /### 気になる点/);
   assert.match(result.digest, /<sub>要約モデル: openrouter\/b\/model:free<\/sub>/);
+});
+
+test("generateDigest falls back when the first model returns reasoning only", async () => {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const fetchImpl = async (url, options) => {
+    if (String(url).endsWith("/models")) {
+      return new Response(JSON.stringify({ data: [
+        { id: "reasoning/model:free", name: "Reasoning Model 32B", created: nowSec },
+        { id: "b/model:free", name: "Model B 70B", created: nowSec }
+      ] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    }
+    const body = JSON.parse(options.body);
+    if (body.model === "reasoning/model:free") {
+      return new Response(
+        JSON.stringify({
+          choices: [{
+            finish_reason: "length",
+            message: { role: "assistant", content: null, reasoning: "考え中" }
+          }],
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 80,
+            total_tokens: 180,
+            completion_tokens_details: { reasoning_tokens: 80 }
+          }
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        choices: [{ message: { content: "- 要点\n- 要点2\n- 要点3\n\n### 補足\n- 補足\n\n### 気になる点\n- 確認" } }]
+      }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  };
+  const context = await loadScripts(
+    [
+      "./ai-prompt-broadcaster/openRouterFreeModels.js",
+      "./ai-prompt-broadcaster/openRouterClient.js",
+      "./ai-prompt-broadcaster/digestService.js"
+    ],
+    { fetch: fetchImpl }
+  );
+  const digestService = context.self.MirrorChatDigestService;
+  const progressEvents = [];
+
+  const result = await digestService.generateDigest({
+    question: "質問",
+    results: [{ name: "ChatGPT", markdown: "回答", error: "" }],
+    settings: {
+      openrouter: {
+        apiKey: "test",
+        preferredModel: "reasoning/model:free",
+        freeModelCandidatesOverride: ["reasoning/model:free", "b/model:free"]
+      }
+    },
+    fetchImpl,
+    onProgress: async (event) => {
+      progressEvents.push({ ...event });
+    }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.modelId, "b/model:free");
+  const failureEvent = progressEvents.find((event) => event.stage === "attempt-failure");
+  assert.ok(failureEvent);
+  assert.match(failureEvent.errorMessage, /reasoning without final text/);
 });
 
 test("generateDigest reports timeout fallback progress", async () => {

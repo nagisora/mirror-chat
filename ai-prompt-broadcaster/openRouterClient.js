@@ -44,6 +44,42 @@
       .trim();
   }
 
+  function extractCompletionText(payload) {
+    const choice = payload?.choices?.[0];
+    if (!choice) {
+      throw new Error("OpenRouter returned no completion choices");
+    }
+
+    const choiceErrorMessage = typeof choice?.error?.message === "string"
+      ? choice.error.message.trim()
+      : "";
+    if (choiceErrorMessage) {
+      throw new Error(`OpenRouter provider error: ${choiceErrorMessage}`);
+    }
+
+    const text = extractTextFromMessageContent(choice?.message?.content);
+    if (text) {
+      return text;
+    }
+
+    const finishReason = typeof choice?.finish_reason === "string" && choice.finish_reason.trim()
+      ? ` (finish_reason: ${choice.finish_reason.trim()})`
+      : "";
+    const reasoning = typeof choice?.message?.reasoning === "string"
+      ? choice.message.reasoning.trim()
+      : "";
+    if (reasoning) {
+      throw new Error(`OpenRouter returned reasoning without final text${finishReason}`);
+    }
+
+    const reasoningTokens = payload?.usage?.completion_tokens_details?.reasoning_tokens;
+    if (typeof reasoningTokens === "number" && Number.isFinite(reasoningTokens) && reasoningTokens > 0) {
+      throw new Error(`OpenRouter returned no final text after consuming ${reasoningTokens} reasoning tokens${finishReason}`);
+    }
+
+    throw new Error(`OpenRouter returned an empty completion${finishReason}`);
+  }
+
   async function requestChatCompletion({
     apiKey,
     modelId,
@@ -82,11 +118,7 @@
       }
 
       const payload = await response.json();
-      const text = extractTextFromMessageContent(payload?.choices?.[0]?.message?.content);
-      if (!text) {
-        throw new Error("OpenRouter returned an empty completion");
-      }
-      return text;
+      return extractCompletionText(payload);
     } catch (error) {
       if (error?.name === "AbortError") {
         throw new Error(`OpenRouter request timed out after ${timeoutMs}ms`, { cause: error });
