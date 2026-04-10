@@ -34,6 +34,68 @@ test("fetchModelsCatalog returns the models array", async () => {
   assert.deepEqual(result, [{ id: "a/model:free" }]);
 });
 
+test("diagnoseChatCompletion returns detailed metadata for reasoning-only responses", async () => {
+  const fetchImpl = async () => new Response(
+    JSON.stringify({
+      id: "gen-test",
+      model: "reasoning/model:free",
+      provider: "demo-provider",
+      choices: [{
+        finish_reason: "length",
+        message: { role: "assistant", content: null, reasoning: "内部思考だけが返っている" }
+      }],
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 50,
+        total_tokens: 150,
+        completion_tokens_details: { reasoning_tokens: 50 }
+      }
+    }),
+    { status: 200, headers: { "content-type": "application/json" } }
+  );
+  const context = await loadScripts(["./ai-prompt-broadcaster/openRouterClient.js"], { fetch: fetchImpl });
+  const client = context.self.MirrorChatOpenRouterClient;
+
+  const result = await client.diagnoseChatCompletion({
+    apiKey: "test",
+    modelId: "reasoning/model:free",
+    systemPrompt: "system",
+    userPrompt: "user",
+    fetchImpl
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /reasoning without final text/);
+  assert.equal(result.analysis.finishReason, "length");
+  assert.equal(result.analysis.contentKind, "null");
+  assert.equal(result.analysis.reasoningTokens, 50);
+  assert.equal(result.analysis.provider, "demo-provider");
+  assert.equal(result.response.status, 200);
+});
+
+test("diagnoseChatCompletion keeps raw HTTP error body for diagnostics", async () => {
+  const fetchImpl = async () => new Response("provider unavailable", {
+    status: 503,
+    statusText: "Service Unavailable",
+    headers: { "content-type": "text/plain" }
+  });
+  const context = await loadScripts(["./ai-prompt-broadcaster/openRouterClient.js"], { fetch: fetchImpl });
+  const client = context.self.MirrorChatOpenRouterClient;
+
+  const result = await client.diagnoseChatCompletion({
+    apiKey: "test",
+    modelId: "broken/model:free",
+    systemPrompt: "system",
+    userPrompt: "user",
+    fetchImpl
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /OpenRouter HTTP 503/);
+  assert.equal(result.rawText, "provider unavailable");
+  assert.equal(result.response.status, 503);
+});
+
 test("requestChatCompletion surfaces provider error from a 200 response", async () => {
   const fetchImpl = async () => new Response(
     JSON.stringify({

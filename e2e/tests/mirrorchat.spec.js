@@ -107,6 +107,9 @@ test.describe("MirrorChat 拡張機能", () => {
     await expect(page.locator("#obsidian-base-url")).toBeVisible();
     await expect(page.locator("#openrouter-enable-digest")).toBeVisible();
     await expect(page.locator("#openrouter-api-key")).toBeVisible();
+    await page.locator("details.advanced-settings").nth(0).locator("summary").click();
+    await expect(page.locator("#openrouter-test-button")).toBeVisible();
+    await expect(page.locator("#openrouter-test-log")).toBeVisible();
   });
 
   test("設定ページで各AIのコピーボタンセレクタが表示される", async ({ page, extensionId }) => {
