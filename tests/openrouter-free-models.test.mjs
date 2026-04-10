@@ -69,5 +69,45 @@ test("refreshDigestFreeModels filters small and old free models", async () => {
 
   assert.deepEqual(Array.from(refreshed.candidates), ["google/gemma-3-27b-it:free"]);
   assert.equal(refreshed.stats.freeCount, 3);
+  assert.equal(refreshed.stats.digestCompatibleCount, 3);
   assert.equal(refreshed.stats.finalCount, 1);
+});
+
+test("refreshDigestFreeModels prioritizes collection-ranked digest models", async () => {
+  const context = await loadScript("./ai-prompt-broadcaster/openRouterFreeModels.js");
+  const models = context.self.MirrorChatOpenRouterFreeModels;
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  const refreshed = models.refreshDigestFreeModels({
+    catalog: [
+      { id: "meta-llama/llama-3.3-70b-instruct:free", name: "Llama 3.3 70B", created: nowSec - 100 },
+      { id: "qwen/qwen3-next-80b-a3b-instruct:free", name: "Qwen3 Next 80B A3B", created: nowSec - 1000 },
+      { id: "google/gemma-4-31b-it:free", name: "Gemma 4 31B", created: nowSec - 10 }
+    ]
+  });
+
+  assert.deepEqual(Array.from(refreshed.candidates), [
+    "google/gemma-4-31b-it:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "qwen/qwen3-next-80b-a3b-instruct:free"
+  ]);
+});
+
+test("refreshDigestFreeModels excludes embed and vl models from digest candidates", async () => {
+  const context = await loadScript("./ai-prompt-broadcaster/openRouterFreeModels.js");
+  const models = context.self.MirrorChatOpenRouterFreeModels;
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  const refreshed = models.refreshDigestFreeModels({
+    catalog: [
+      { id: "nvidia/llama-nemotron-embed-vl-1b-v2:free", name: "Embed VL 1B", created: nowSec },
+      { id: "nvidia/nemotron-nano-12b-v2-vl:free", name: "Nemotron Nano 12B 2 VL", created: nowSec },
+      { id: "minimax/minimax-m2.5:free", name: "MiniMax M2.5 39B", created: nowSec }
+    ],
+    minParamB: 0
+  });
+
+  assert.deepEqual(Array.from(refreshed.candidates), ["minimax/minimax-m2.5:free"]);
+  assert.equal(refreshed.stats.freeCount, 3);
+  assert.equal(refreshed.stats.digestCompatibleCount, 1);
 });

@@ -1,12 +1,29 @@
 (function () {
   const DEFAULT_MIN_PARAM_B = 27;
   const DEFAULT_MAX_AGE_DAYS = 180;
-  const DEFAULT_DIGEST_FREE_MODELS = [
-    "google/gemma-3-27b-it:free",
+  const COLLECTION_PRIORITY_MODELS = [
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "arcee-ai/trinity-large-preview:free",
+    "z-ai/glm-4.5-air:free",
+    "nvidia/nemotron-3-nano-30b-a3b:free",
+    "minimax/minimax-m2.5:free",
+    "openai/gpt-oss-120b:free",
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "qwen/qwen3-coder:free",
     "meta-llama/llama-3.3-70b-instruct:free",
-    "deepseek/deepseek-r1-distill-llama-70b:free",
-    "qwen/qwq-32b:free"
+    "qwen/qwen3-next-80b-a3b-instruct:free",
+    "openai/gpt-oss-20b:free"
   ];
+  const DEFAULT_DIGEST_FREE_MODELS = [
+    "qwen/qwen3-next-80b-a3b-instruct:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "google/gemma-4-31b-it:free",
+    "minimax/minimax-m2.5:free"
+  ];
+  const COLLECTION_PRIORITY_INDEX = new Map(
+    COLLECTION_PRIORITY_MODELS.map((modelId, index) => [modelId, index])
+  );
 
   function normalizeCandidateList(candidates) {
     const unique = new Set();
@@ -22,6 +39,12 @@
 
   function getDefaultDigestFreeModels() {
     return [...DEFAULT_DIGEST_FREE_MODELS];
+  }
+
+  function getCollectionPriorityIndex(modelId) {
+    return COLLECTION_PRIORITY_INDEX.has(modelId)
+      ? COLLECTION_PRIORITY_INDEX.get(modelId)
+      : Number.POSITIVE_INFINITY;
   }
 
   function buildCandidateList({ preferredModel, candidates } = {}) {
@@ -83,8 +106,17 @@
       id,
       name,
       createdAtMs,
-      inferredParamB: inferParamBFromText(`${id} ${name}`)
+      inferredParamB: inferParamBFromText(`${id} ${name}`),
+      collectionPriority: getCollectionPriorityIndex(id)
     };
+  }
+
+  function isDigestCompatibleModel(entry) {
+    const text = `${entry?.id || ""} ${entry?.name || ""}`.toLowerCase();
+    if (text.includes("embed")) return false;
+    if (text.includes("vl")) return false;
+    if (text.includes("vision")) return false;
+    return true;
   }
 
   function refreshDigestFreeModels({
@@ -100,7 +132,8 @@
       .filter((entry) => Boolean(entry));
 
     const freeModels = entries.filter((entry) => entry.id.endsWith(":free"));
-    const ageFiltered = freeModels.filter((entry) => {
+    const digestCompatible = freeModels.filter((entry) => isDigestCompatibleModel(entry));
+    const ageFiltered = digestCompatible.filter((entry) => {
       if (maxAgeMs <= 0) return true;
       if (entry.createdAtMs === null) return false;
       const age = now - entry.createdAtMs;
@@ -112,6 +145,9 @@
     });
 
     const sorted = sizeFiltered.slice().sort((a, b) => {
+      const aPriority = a.collectionPriority ?? Number.POSITIVE_INFINITY;
+      const bPriority = b.collectionPriority ?? Number.POSITIVE_INFINITY;
+      if (aPriority !== bPriority) return aPriority - bPriority;
       const aCreated = a.createdAtMs ?? -1;
       const bCreated = b.createdAtMs ?? -1;
       if (aCreated !== bCreated) return bCreated - aCreated;
@@ -127,6 +163,7 @@
       stats: {
         catalogCount: entries.length,
         freeCount: freeModels.length,
+        digestCompatibleCount: digestCompatible.length,
         ageFilteredCount: ageFiltered.length,
         finalCount: sorted.length,
         minParamB,
