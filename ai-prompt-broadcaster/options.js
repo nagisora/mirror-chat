@@ -270,19 +270,23 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function formatRefreshMeta(openRouterSettings) {
-    const candidates = Array.isArray(openRouterSettings?.freeModelCandidatesOverride)
-      ? openRouterSettings.freeModelCandidatesOverride
-      : [];
-    const lastRefreshAt = String(openRouterSettings?.lastRefreshAt || "").trim();
-    if (!lastRefreshAt && candidates.length === 0) {
-      return "更新済み候補はまだありません。";
+    const summary = openRouterFreeModels.summarizeModelAvailability({
+      preferredModel: openRouterSettings?.preferredModel,
+      candidates: openRouterSettings?.freeModelCandidatesOverride,
+      stats: openRouterSettings?.lastRefreshStats,
+      lastRefreshAt: openRouterSettings?.lastRefreshAt
+    });
+    if (!summary.hasRefreshInfo) {
+      return `更新済み候補はまだありません。プルダウン表示: ${summary.selectableCount}件（既定候補）`;
     }
     const parts = [];
-    if (candidates.length > 0) {
-      parts.push(`候補数: ${candidates.length}`);
+    if (summary.freeCount !== null) {
+      parts.push(`free取得: ${summary.freeCount}`);
     }
-    if (lastRefreshAt) {
-      parts.push(`最終更新: ${new Date(lastRefreshAt).toLocaleString("ja-JP")}`);
+    parts.push(`digest候補: ${summary.digestCandidateCount}`);
+    parts.push(`プルダウン表示: ${summary.selectableCount}`);
+    if (summary.lastRefreshAt) {
+      parts.push(`最終更新: ${new Date(summary.lastRefreshAt).toLocaleString("ja-JP")}`);
     }
     return parts.join(" / ");
   }
@@ -404,10 +408,19 @@ document.addEventListener("DOMContentLoaded", async () => {
       const nextSettings = await storage.saveSettings({
         openrouter: {
           freeModelCandidatesOverride: refreshed.candidates,
+          lastRefreshStats: refreshed.stats,
           lastRefreshAt: new Date().toISOString()
         }
       });
-      openRouterRefreshStatus.textContent = `free 候補を更新しました。${refreshed.candidates.length}件`;
+      const summary = openRouterFreeModels.summarizeModelAvailability({
+        preferredModel: nextSettings?.openrouter?.preferredModel,
+        candidates: nextSettings?.openrouter?.freeModelCandidatesOverride,
+        stats: nextSettings?.openrouter?.lastRefreshStats,
+        lastRefreshAt: nextSettings?.openrouter?.lastRefreshAt
+      });
+      openRouterRefreshStatus.textContent =
+        `free取得 ${summary.freeCount ?? 0}件 / digest候補 ${summary.digestCandidateCount}件 / ` +
+        `プルダウン表示 ${summary.selectableCount}件 を更新しました。`;
       populatePreferredModelOptions(nextSettings);
       populateTestModelSuggestions(nextSettings);
       openRouterRefreshMeta.textContent = formatRefreshMeta(nextSettings.openrouter);

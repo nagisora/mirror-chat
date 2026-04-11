@@ -103,6 +103,7 @@
 
     let resolvedCandidates = settings?.openrouter?.freeModelCandidatesOverride;
     let refreshedCandidates = [];
+    let refreshedStats = {};
     try {
       if (typeof onProgress === "function") {
         await onProgress({
@@ -122,6 +123,7 @@
       });
       resolvedCandidates = refreshed.candidates;
       refreshedCandidates = refreshed.candidates;
+      refreshedStats = refreshed.stats || {};
     } catch (error) {
       const kind = freeModelSelector.classifyOpenRouterError(error);
       if (typeof onProgress === "function") {
@@ -199,7 +201,8 @@
       }),
       modelId: selection.modelId,
       attempts: selection.attempts,
-      refreshedCandidates
+      refreshedCandidates,
+      refreshedStats
     };
   }
 

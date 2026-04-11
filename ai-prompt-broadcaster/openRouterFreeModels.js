@@ -79,6 +79,34 @@
     return options;
   }
 
+  function summarizeModelAvailability({ preferredModel, candidates, stats, lastRefreshAt } = {}) {
+    const normalizedCandidates = Array.isArray(candidates) ? normalizeCandidateList(candidates) : [];
+    const normalizedStats = stats && typeof stats === "object" ? stats : {};
+    const summary = {
+      digestCandidateCount: buildCandidateList({
+        preferredModel,
+        candidates: normalizedCandidates
+      }).length,
+      selectableCount: buildKnownFreeModelList({
+        preferredModel,
+        candidates: normalizedCandidates
+      }).length,
+      freeCount: Number.isFinite(normalizedStats.freeCount) ? normalizedStats.freeCount : null,
+      catalogCount: Number.isFinite(normalizedStats.catalogCount) ? normalizedStats.catalogCount : null,
+      digestCompatibleCount: Number.isFinite(normalizedStats.digestCompatibleCount)
+        ? normalizedStats.digestCompatibleCount
+        : null,
+      lastRefreshAt: String(lastRefreshAt || "").trim()
+    };
+    summary.hasRefreshInfo =
+      normalizedCandidates.length > 0 ||
+      !!summary.lastRefreshAt ||
+      summary.freeCount !== null ||
+      summary.catalogCount !== null ||
+      summary.digestCompatibleCount !== null;
+    return summary;
+  }
+
   function classifyOpenRouterError(error) {
     const message = error instanceof Error ? error.message : String(error || "");
     const lower = message.toLowerCase();
@@ -237,6 +265,7 @@
     buildCandidateList,
     buildKnownFreeModelList,
     buildSelectOptions,
+    summarizeModelAvailability,
     classifyOpenRouterError,
     refreshDigestFreeModels,
     tryCandidates

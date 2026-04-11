@@ -258,7 +258,13 @@ test.describe("MirrorChat 拡張機能", () => {
     await expect(page.locator("#resave-button")).toBeEnabled();
     await expect(page.locator("#regenerate-digest-button")).toBeEnabled();
     await expect(page.locator("#digest-model-select")).toHaveValue("");
-    await expect(page.locator("#digest-model-select option")).toHaveCount(3);
+    const digestModelOptions = await page.locator("#digest-model-select option").evaluateAll((options) =>
+      options.map((option) => option.value)
+    );
+    expect(digestModelOptions).toContain("");
+    expect(digestModelOptions).toContain("google/gemma-3-27b-it:free");
+    expect(digestModelOptions).toContain("meta-llama/llama-3.3-70b-instruct:free");
+    expect(digestModelOptions).toContain("z-ai/glm-4.5-air:free");
   });
 
   test("高度なAI設定を保存・復元できる", async ({ page, extensionId }) => {

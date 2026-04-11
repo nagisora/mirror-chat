@@ -125,6 +125,22 @@ test("buildSelectOptions includes collection-ranked models even when not in stor
   assert.ok(values.includes("meta-llama/llama-3.3-70b-instruct:free"));
 });
 
+test("summarizeModelAvailability separates digest candidates from selectable models", async () => {
+  const context = await loadScript("./ai-prompt-broadcaster/openRouterFreeModels.js");
+  const models = context.self.MirrorChatOpenRouterFreeModels;
+
+  const summary = models.summarizeModelAvailability({
+    candidates: ["meta-llama/llama-3.3-70b-instruct:free"],
+    stats: { freeCount: 24 },
+    lastRefreshAt: "2026-04-11T00:00:00.000Z"
+  });
+
+  assert.equal(summary.digestCandidateCount, 1);
+  assert.ok(summary.selectableCount > summary.digestCandidateCount);
+  assert.equal(summary.freeCount, 24);
+  assert.equal(summary.hasRefreshInfo, true);
+});
+
 test("refreshDigestFreeModels keeps collection-ranked models when created date is missing", async () => {
   const context = await loadScript("./ai-prompt-broadcaster/openRouterFreeModels.js");
   const models = context.self.MirrorChatOpenRouterFreeModels;

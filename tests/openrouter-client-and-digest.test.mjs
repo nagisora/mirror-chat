@@ -204,6 +204,8 @@ test("generateDigest falls back to next candidate when first one fails", async (
 
   assert.equal(result.ok, true);
   assert.equal(result.modelId, "b/model:free");
+  assert.equal(result.refreshedStats.freeCount, 2);
+  assert.equal(result.refreshedStats.finalCount, 2);
   assert.equal(progressEvents[0].stage, "catalog-start");
   assert.equal(progressEvents[1].stage, "attempt-start");
   assert.equal(progressEvents[1].modelId, "a/model:free");

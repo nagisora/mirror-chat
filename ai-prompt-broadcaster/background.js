@@ -115,6 +115,7 @@ async function runDigestFollowUp({ question, results, settings, notePath }) {
       await self.MirrorChatStorage.saveSettings({
         openrouter: {
           freeModelCandidatesOverride: digestResult.refreshedCandidates,
+          lastRefreshStats: digestResult.refreshedStats || {},
           lastRefreshAt: new Date().toISOString()
         }
       });
