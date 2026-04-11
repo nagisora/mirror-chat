@@ -74,6 +74,9 @@ pnpm run test:with-profile
 1. `chrome-profile.zip` を `e2e/.chrome-profile/` に展開
 2. `MIRRORCHAT_USER_DATA_DIR` を設定してテストを実行
 
+既定では headless 実行のため、ローカル作業中でもブラウザウィンドウは表示されません。
+表示しながら確認したい場合だけ `pnpm run test:with-profile:headed` を使ってください。
+
 ---
 
 ## トラブルシューティング
@@ -135,7 +138,10 @@ cd /workspace/e2e
 # zip を展開（初回のみ）
 unzip -o chrome-profile.zip -d .chrome-profile/
 
-# テスト実行
+# テスト実行（headless）
+MIRRORCHAT_USER_DATA_DIR=/workspace/e2e/.chrome-profile pnpm test
+
+# ブラウザを表示して実行したい場合
 MIRRORCHAT_USER_DATA_DIR=/workspace/e2e/.chrome-profile pnpm test:headed
 ```
 
