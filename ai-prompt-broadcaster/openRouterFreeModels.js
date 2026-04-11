@@ -1,12 +1,29 @@
 (function () {
   const DEFAULT_MIN_PARAM_B = 27;
   const DEFAULT_MAX_AGE_DAYS = 180;
-  const DEFAULT_DIGEST_FREE_MODELS = [
-    "google/gemma-3-27b-it:free",
+  const COLLECTION_PRIORITY_MODELS = [
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "arcee-ai/trinity-large-preview:free",
+    "z-ai/glm-4.5-air:free",
+    "nvidia/nemotron-3-nano-30b-a3b:free",
+    "minimax/minimax-m2.5:free",
+    "openai/gpt-oss-120b:free",
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "qwen/qwen3-coder:free",
     "meta-llama/llama-3.3-70b-instruct:free",
-    "deepseek/deepseek-r1-distill-llama-70b:free",
-    "qwen/qwq-32b:free"
+    "qwen/qwen3-next-80b-a3b-instruct:free",
+    "openai/gpt-oss-20b:free"
   ];
+  const DEFAULT_DIGEST_FREE_MODELS = [
+    "qwen/qwen3-next-80b-a3b-instruct:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "google/gemma-4-31b-it:free",
+    "minimax/minimax-m2.5:free"
+  ];
+  const COLLECTION_PRIORITY_INDEX = new Map(
+    COLLECTION_PRIORITY_MODELS.map((modelId, index) => [modelId, index])
+  );
 
   function normalizeCandidateList(candidates) {
     const unique = new Set();
@@ -24,6 +41,16 @@
     return [...DEFAULT_DIGEST_FREE_MODELS];
   }
 
+  function getCollectionPriorityModels() {
+    return [...COLLECTION_PRIORITY_MODELS];
+  }
+
+  function getCollectionPriorityIndex(modelId) {
+    return COLLECTION_PRIORITY_INDEX.has(modelId)
+      ? COLLECTION_PRIORITY_INDEX.get(modelId)
+      : Number.POSITIVE_INFINITY;
+  }
+
   function buildCandidateList({ preferredModel, candidates } = {}) {
     const base = Array.isArray(candidates) && candidates.length > 0
       ? candidates
@@ -32,13 +59,52 @@
     return normalizeCandidateList(preferred ? [preferred, ...base] : base);
   }
 
+  function buildKnownFreeModelList({ preferredModel, candidates } = {}) {
+    const preferred = String(preferredModel || "").trim();
+    const provided = Array.isArray(candidates) ? candidates : [];
+    return normalizeCandidateList([
+      preferred,
+      ...provided,
+      ...getCollectionPriorityModels(),
+      ...getDefaultDigestFreeModels()
+    ]);
+  }
+
   function buildSelectOptions({ preferredModel, candidates } = {}) {
-    const ordered = buildCandidateList({ preferredModel, candidates });
+    const ordered = buildKnownFreeModelList({ preferredModel, candidates });
     const options = [{ value: "", label: "自動選択（最新の free 候補から選ぶ）" }];
     for (const modelId of ordered) {
       options.push({ value: modelId, label: modelId });
     }
     return options;
+  }
+
+  function summarizeModelAvailability({ preferredModel, candidates, stats, lastRefreshAt } = {}) {
+    const normalizedCandidates = Array.isArray(candidates) ? normalizeCandidateList(candidates) : [];
+    const normalizedStats = stats && typeof stats === "object" ? stats : {};
+    const summary = {
+      digestCandidateCount: buildCandidateList({
+        preferredModel,
+        candidates: normalizedCandidates
+      }).length,
+      selectableCount: buildKnownFreeModelList({
+        preferredModel,
+        candidates: normalizedCandidates
+      }).length,
+      freeCount: Number.isFinite(normalizedStats.freeCount) ? normalizedStats.freeCount : null,
+      catalogCount: Number.isFinite(normalizedStats.catalogCount) ? normalizedStats.catalogCount : null,
+      digestCompatibleCount: Number.isFinite(normalizedStats.digestCompatibleCount)
+        ? normalizedStats.digestCompatibleCount
+        : null,
+      lastRefreshAt: String(lastRefreshAt || "").trim()
+    };
+    summary.hasRefreshInfo =
+      normalizedCandidates.length > 0 ||
+      !!summary.lastRefreshAt ||
+      summary.freeCount !== null ||
+      summary.catalogCount !== null ||
+      summary.digestCompatibleCount !== null;
+    return summary;
   }
 
   function classifyOpenRouterError(error) {
@@ -83,8 +149,17 @@
       id,
       name,
       createdAtMs,
-      inferredParamB: inferParamBFromText(`${id} ${name}`)
+      inferredParamB: inferParamBFromText(`${id} ${name}`),
+      collectionPriority: getCollectionPriorityIndex(id)
     };
+  }
+
+  function isDigestCompatibleModel(entry) {
+    const text = `${entry?.id || ""} ${entry?.name || ""}`.toLowerCase();
+    if (text.includes("embed")) return false;
+    if (text.includes("vl")) return false;
+    if (text.includes("vision")) return false;
+    return true;
   }
 
   function refreshDigestFreeModels({
@@ -100,9 +175,12 @@
       .filter((entry) => Boolean(entry));
 
     const freeModels = entries.filter((entry) => entry.id.endsWith(":free"));
-    const ageFiltered = freeModels.filter((entry) => {
+    const digestCompatible = freeModels.filter((entry) => isDigestCompatibleModel(entry));
+    const ageFiltered = digestCompatible.filter((entry) => {
       if (maxAgeMs <= 0) return true;
-      if (entry.createdAtMs === null) return false;
+      if (entry.createdAtMs === null) {
+        return Number.isFinite(entry.collectionPriority);
+      }
       const age = now - entry.createdAtMs;
       return age >= 0 && age <= maxAgeMs;
     });
@@ -112,6 +190,9 @@
     });
 
     const sorted = sizeFiltered.slice().sort((a, b) => {
+      const aPriority = a.collectionPriority ?? Number.POSITIVE_INFINITY;
+      const bPriority = b.collectionPriority ?? Number.POSITIVE_INFINITY;
+      if (aPriority !== bPriority) return aPriority - bPriority;
       const aCreated = a.createdAtMs ?? -1;
       const bCreated = b.createdAtMs ?? -1;
       if (aCreated !== bCreated) return bCreated - aCreated;
@@ -127,6 +208,7 @@
       stats: {
         catalogCount: entries.length,
         freeCount: freeModels.length,
+        digestCompatibleCount: digestCompatible.length,
         ageFilteredCount: ageFiltered.length,
         finalCount: sorted.length,
         minParamB,
@@ -178,9 +260,12 @@
   }
 
   self.MirrorChatOpenRouterFreeModels = {
+    getCollectionPriorityModels,
     getDefaultDigestFreeModels,
     buildCandidateList,
+    buildKnownFreeModelList,
     buildSelectOptions,
+    summarizeModelAvailability,
     classifyOpenRouterError,
     refreshDigestFreeModels,
     tryCandidates

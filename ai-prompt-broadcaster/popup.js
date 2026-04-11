@@ -53,6 +53,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const MSG_AI_STATUS = MESSAGE_TYPES.AI_STATUS || "MIRRORCHAT_AI_STATUS";
   const MSG_DONE = MESSAGE_TYPES.DONE || "MIRRORCHAT_DONE";
   const storage = window.MirrorChatStorage;
+  const openRouterFreeModels = window.MirrorChatOpenRouterFreeModels;
 
   const indicators = {};
   const aiCheckboxes = {};
@@ -85,6 +86,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   };
 
   function buildDigestModelOptions(settings) {
+    if (openRouterFreeModels?.buildSelectOptions) {
+      return openRouterFreeModels.buildSelectOptions({
+        preferredModel: settings?.openrouter?.preferredModel,
+        candidates: settings?.openrouter?.freeModelCandidatesOverride
+      }).map((option, index) => (index === 0 ? { ...option, label: "自動選択" } : option));
+    }
+
     const preferredModel = String(settings?.openrouter?.preferredModel || "").trim();
     const candidates = Array.isArray(settings?.openrouter?.freeModelCandidatesOverride)
       ? settings.openrouter.freeModelCandidatesOverride
