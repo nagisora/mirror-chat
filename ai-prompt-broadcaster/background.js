@@ -12,7 +12,7 @@ importScripts(
   "aiCommunication.js"
 );
 
-const { AI_KEYS, STORAGE_KEYS, MESSAGE_TYPES } = self.MirrorChatConstants;
+const { AI_KEYS, AI_DEFAULT_ORDER, STORAGE_KEYS, MESSAGE_TYPES } = self.MirrorChatConstants;
 const CURRENT_TASK_KEY = STORAGE_KEYS.CURRENT_TASK;
 const LAST_SAVED_FOLDER_KEY = STORAGE_KEYS.LAST_SAVED_FOLDER;
 const LAST_NOTE_SNAPSHOT_KEY = STORAGE_KEYS.LAST_NOTE_SNAPSHOT;
@@ -155,17 +155,54 @@ async function runDigestFollowUp({ question, results, settings, notePath }) {
   sendDigestStatus(`digest を反映しました。使用モデル: ${digestResult.modelId}`, { tone: "success" });
 }
 
-function resolveEnabledAIs(rawEnabledAIs) {
-  if (typeof rawEnabledAIs === "undefined") return [...AI_KEYS];
+function normalizeAiOrder(rawOrder) {
+  const validKeys = new Set(AI_KEYS);
+  const seen = new Set();
+  const ordered = [];
+  if (Array.isArray(rawOrder)) {
+    rawOrder.forEach((aiKey) => {
+      const key = String(aiKey || "").trim();
+      if (!key || !validKeys.has(key) || seen.has(key)) return;
+      seen.add(key);
+      ordered.push(key);
+    });
+  }
+  (AI_DEFAULT_ORDER || []).forEach((aiKey) => {
+    if (validKeys.has(aiKey) && !seen.has(aiKey)) {
+      seen.add(aiKey);
+      ordered.push(aiKey);
+    }
+  });
+  AI_KEYS.forEach((aiKey) => {
+    if (!seen.has(aiKey)) {
+      seen.add(aiKey);
+      ordered.push(aiKey);
+    }
+  });
+  return ordered;
+}
+
+function resolveEnabledAIs(rawEnabledAIs, aiOrder) {
+  const validKeys = new Set(AI_KEYS);
+  const normalizedOrder = normalizeAiOrder(aiOrder);
+  if (typeof rawEnabledAIs === "undefined") return normalizedOrder;
   if (!Array.isArray(rawEnabledAIs)) return [];
-  return AI_KEYS.filter((key) => rawEnabledAIs.includes(key));
+  const seen = new Set();
+  const enabled = [];
+  rawEnabledAIs.forEach((aiKey) => {
+    const key = String(aiKey || "").trim();
+    if (!key || !validKeys.has(key) || seen.has(key)) return;
+    seen.add(key);
+    enabled.push(key);
+  });
+  return enabled;
 }
 
 tabManager.setStatusNotifier(aiCommunication.notifyAIStatus);
 
 async function runTask(task) {
   const settings = await self.MirrorChatStorage.getSettings();
-  const enabledAIs = resolveEnabledAIs(task.enabledAIs);
+  const enabledAIs = resolveEnabledAIs(task.enabledAIs, settings.aiOrder);
   let results;
 
   if (task.retryPayload?.results) {
@@ -395,7 +432,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         try {
           await tabManager.loadAiTabIds();
           const prompt = msg.prompt;
-          const enabledAIs = resolveEnabledAIs(msg.enabledAIs);
+          const settings = await self.MirrorChatStorage.getSettings();
+          const enabledAIs = resolveEnabledAIs(msg.enabledAIs, settings.aiOrder);
           if (enabledAIs.length === 0) {
             sendResponse({ ok: false, error: "使用する AI を1つ以上選択してください。" });
             return;
@@ -409,7 +447,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             )
           );
 
-          const settings = await self.MirrorChatStorage.getSettings();
           const sendPromises = enabledAIs.map((aiKey) => {
             if (!tabManager.getTabId(aiKey)) {
               const cfg = settings.aiConfigs?.[aiKey];
@@ -444,11 +481,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           sendResponse({ ok: false, error: "取得対象の質問が見つかりませんでした" });
           return;
         }
+        const settings = await self.MirrorChatStorage.getSettings();
         await tabManager.loadAiTabIds();
         taskQueue.enqueue({
           prompt: current.prompt,
           isFollowUp: !!current.isFollowUp,
-          enabledAIs: resolveEnabledAIs(current.enabledAIs)
+          enabledAIs: resolveEnabledAIs(current.enabledAIs, settings.aiOrder)
         });
         if (!taskQueue.isProcessing()) processNext();
         sendResponse({ ok: true });

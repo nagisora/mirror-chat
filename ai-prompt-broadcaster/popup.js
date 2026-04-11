@@ -32,9 +32,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   const resaveButton = document.getElementById("resave-button");
   const regenerateDigestButton = document.getElementById("regenerate-digest-button");
   const digestModelSelect = document.getElementById("digest-model-select");
+  const tabStatus = document.getElementById("tab-status");
 
   const constants = window.MirrorChatConstants || {};
   const AI_KEYS = constants.AI_KEYS ?? ["chatgpt", "claude", "gemini", "grok"];
+  const AI_DEFAULT_ORDER = constants.AI_DEFAULT_ORDER ?? ["gemini", "chatgpt", "claude", "grok"];
   const MESSAGE_TYPES = constants.MESSAGE_TYPES || {};
   const currentTaskKey = constants.STORAGE_KEYS?.CURRENT_TASK ?? "mirrorchatCurrentTask";
   const failedItemsKey = constants.STORAGE_KEYS?.FAILED_ITEMS ?? "mirrorchatFailedItems";
@@ -57,17 +59,66 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const indicators = {};
   const aiCheckboxes = {};
+  const tabItems = {};
   AI_KEYS.forEach((key) => {
     indicators[key] = document.getElementById("ind-" + key);
     aiCheckboxes[key] = document.querySelector('.ai-checkbox[data-ai="' + key + '"]');
+    tabItems[key] = tabStatus?.querySelector('.tab-item[data-ai="' + key + '"]') || null;
   });
 
-  function getDefaultEnabledAIs() {
-    return Object.fromEntries(AI_KEYS.map((key) => [key, true]));
+  function normalizeAiOrder(rawOrder) {
+    const validKeys = new Set(AI_KEYS);
+    const seen = new Set();
+    const ordered = [];
+    if (Array.isArray(rawOrder)) {
+      rawOrder.forEach((aiKey) => {
+        const key = String(aiKey || "").trim();
+        if (!key || !validKeys.has(key) || seen.has(key)) return;
+        seen.add(key);
+        ordered.push(key);
+      });
+    }
+    AI_DEFAULT_ORDER.forEach((aiKey) => {
+      if (validKeys.has(aiKey) && !seen.has(aiKey)) {
+        seen.add(aiKey);
+        ordered.push(aiKey);
+      }
+    });
+    AI_KEYS.forEach((aiKey) => {
+      if (!seen.has(aiKey)) {
+        seen.add(aiKey);
+        ordered.push(aiKey);
+      }
+    });
+    return ordered;
   }
 
-  function getSelectedAIs(enabledAIs) {
-    return AI_KEYS.filter((key) => !!enabledAIs[key]);
+  function applyAiOrderToTabItems(aiOrder) {
+    const normalized = normalizeAiOrder(aiOrder);
+    normalized.forEach((aiKey) => {
+      const item = tabItems[aiKey];
+      if (item && tabStatus) {
+        tabStatus.appendChild(item);
+      }
+    });
+    return normalized;
+  }
+
+  function normalizeEnabledAIs(enabledAIs, aiOrder) {
+    const ordered = normalizeAiOrder(aiOrder);
+    const next = {};
+    ordered.forEach((key) => {
+      next[key] = typeof enabledAIs?.[key] === "boolean" ? enabledAIs[key] : true;
+    });
+    return next;
+  }
+
+  function getDefaultEnabledAIs(aiOrder = AI_DEFAULT_ORDER) {
+    return Object.fromEntries(normalizeAiOrder(aiOrder).map((key) => [key, true]));
+  }
+
+  function getSelectedAIs(enabledAIs, aiOrder = appState.aiOrder) {
+    return normalizeAiOrder(aiOrder).filter((key) => !!enabledAIs[key]);
   }
 
   const appState = {
@@ -77,7 +128,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     digestStatusTone: "info",
     openTabs: {},
     aiStates: Object.fromEntries(AI_KEYS.map((key) => [key, ""])),
-    enabledAIs: getDefaultEnabledAIs(),
+    aiOrder: normalizeAiOrder(AI_DEFAULT_ORDER),
+    enabledAIs: getDefaultEnabledAIs(AI_DEFAULT_ORDER),
     hasPendingQuestion: false,
     allowCollect: false,
     hasFailedItems: false,
@@ -140,9 +192,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   function render() {
     const hasOpenTabs = Object.keys(appState.openTabs || {}).length > 0;
-    const selectedAIs = getSelectedAIs(appState.enabledAIs);
+    const selectedAIs = getSelectedAIs(appState.enabledAIs, appState.aiOrder);
 
-    AI_KEYS.forEach((key) => {
+    appState.aiOrder.forEach((key) => {
       setIndicator(key, getAiIndicatorState(key));
       if (aiCheckboxes[key]) aiCheckboxes[key].checked = !!appState.enabledAIs[key];
     });
@@ -189,8 +241,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       readLocalStorage(lastNoteSnapshotKey),
       storage.getSettings()
     ]);
+    const nextOrder = applyAiOrderToTabItems(settings?.aiOrder);
     populateDigestModelSelect(settings);
-    setState({ hasLastSavedNote: !!snapshot?.notePath });
+    setState({
+      aiOrder: nextOrder,
+      enabledAIs: normalizeEnabledAIs(appState.enabledAIs, nextOrder),
+      hasLastSavedNote: !!snapshot?.notePath
+    });
     return snapshot;
   }
 
@@ -207,7 +264,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   openTabsButton.addEventListener("click", () => {
-    const enabledAIs = getSelectedAIs(appState.enabledAIs);
+    const enabledAIs = getSelectedAIs(appState.enabledAIs, appState.aiOrder);
     if (enabledAIs.length === 0) {
       setState({ statusText: "使用する AI を1つ以上選択してください。" });
       return;
@@ -240,7 +297,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   closeTabsButton.addEventListener("click", () => {
-    const enabledAIs = getSelectedAIs(appState.enabledAIs);
+    const enabledAIs = getSelectedAIs(appState.enabledAIs, appState.aiOrder);
     if (enabledAIs.length === 0) {
       setState({ statusText: "使用する AI を1つ以上選択してください。" });
       return;
@@ -259,16 +316,14 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
-    const enabledAIs = getSelectedAIs(appState.enabledAIs);
+    const enabledAIs = getSelectedAIs(appState.enabledAIs, appState.aiOrder);
     if (enabledAIs.length === 0) {
       setState({ statusText: "使用する AI を1つ以上選択してください。" });
       return;
     }
 
     const isFollowUp = followUpCheckbox.checked;
-    const nextAiStates = Object.fromEntries(
-      AI_KEYS.map((key) => [key, enabledAIs.includes(key) ? "sending" : ""])
-    );
+    const nextAiStates = Object.fromEntries(AI_KEYS.map((key) => [key, enabledAIs.includes(key) ? "sending" : ""]));
     setState({
       busyAction: "sending",
       hasPendingQuestion: true,
@@ -475,7 +530,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   await syncRetryState();
   await syncLastSavedNoteState();
-  setState({ enabledAIs: getDefaultEnabledAIs() });
+  setState({
+    aiOrder: normalizeAiOrder(appState.aiOrder),
+    enabledAIs: getDefaultEnabledAIs(appState.aiOrder)
+  });
   refreshTabStatus();
   promptInput.value = "";
   followUpCheckbox.checked = false;

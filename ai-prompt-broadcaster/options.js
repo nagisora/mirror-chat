@@ -17,13 +17,114 @@ document.addEventListener("DOMContentLoaded", async () => {
   const openRouterTestLog = document.getElementById("openrouter-test-log");
   const saveButton = document.getElementById("save-button");
   const status = document.getElementById("status");
+  const aiOrderList = document.getElementById("ai-order-list");
+  const aiConfigList = document.getElementById("ai-config-list");
 
   const storage = window.MirrorChatStorage;
   const openRouterClient = window.MirrorChatOpenRouterClient;
   const openRouterFreeModels = window.MirrorChatOpenRouterFreeModels;
   const digestService = window.MirrorChatDigestService;
+  const constants = window.MirrorChatConstants || {};
+  const AI_KEYS = constants.AI_KEYS || ["chatgpt", "claude", "gemini", "grok"];
+  const AI_DEFAULT_ORDER = constants.AI_DEFAULT_ORDER || ["gemini", "chatgpt", "claude", "grok"];
+  const AI_CONFIG_DEFAULTS = constants.AI_CONFIG_DEFAULTS || {};
   const MESSAGE_TYPES = window.MirrorChatConstants?.MESSAGE_TYPES || {};
   const MSG_RETRY = MESSAGE_TYPES.RETRY || "MIRRORCHAT_RETRY";
+
+  let currentAiOrder = normalizeAiOrder(AI_DEFAULT_ORDER);
+
+  function normalizeAiOrder(rawOrder) {
+    const validKeys = new Set(AI_KEYS);
+    const seen = new Set();
+    const ordered = [];
+    if (Array.isArray(rawOrder)) {
+      rawOrder.forEach((aiKey) => {
+        const key = String(aiKey || "").trim();
+        if (!key || !validKeys.has(key) || seen.has(key)) return;
+        seen.add(key);
+        ordered.push(key);
+      });
+    }
+    AI_DEFAULT_ORDER.forEach((aiKey) => {
+      if (validKeys.has(aiKey) && !seen.has(aiKey)) {
+        seen.add(aiKey);
+        ordered.push(aiKey);
+      }
+    });
+    AI_KEYS.forEach((aiKey) => {
+      if (!seen.has(aiKey)) {
+        seen.add(aiKey);
+        ordered.push(aiKey);
+      }
+    });
+    return ordered;
+  }
+
+  function getAiDisplayName(aiKey) {
+    return AI_CONFIG_DEFAULTS?.[aiKey]?.name || aiKey;
+  }
+
+  function applyAiOrderToConfigSections(aiOrder) {
+    if (!aiConfigList) return;
+    normalizeAiOrder(aiOrder).forEach((aiKey) => {
+      const section = aiConfigList.querySelector(`.ai-config[data-ai="${aiKey}"]`);
+      if (section) aiConfigList.appendChild(section);
+    });
+  }
+
+  function moveAiOrder(aiKey, offset) {
+    const index = currentAiOrder.indexOf(aiKey);
+    if (index === -1) return;
+    const nextIndex = index + offset;
+    if (nextIndex < 0 || nextIndex >= currentAiOrder.length) return;
+    const updated = [...currentAiOrder];
+    const [item] = updated.splice(index, 1);
+    updated.splice(nextIndex, 0, item);
+    currentAiOrder = updated;
+    renderAiOrderList();
+    applyAiOrderToConfigSections(currentAiOrder);
+  }
+
+  function renderAiOrderList() {
+    if (!aiOrderList) return;
+    aiOrderList.innerHTML = "";
+    currentAiOrder.forEach((aiKey, index) => {
+      const item = document.createElement("li");
+      item.className = "ai-order-item";
+      item.dataset.ai = aiKey;
+
+      const name = document.createElement("span");
+      name.className = "ai-order-name";
+      name.textContent = getAiDisplayName(aiKey);
+
+      const controls = document.createElement("div");
+      controls.className = "ai-order-controls";
+
+      const upButton = document.createElement("button");
+      upButton.type = "button";
+      upButton.className = "ai-order-button";
+      upButton.dataset.action = "up";
+      upButton.dataset.ai = aiKey;
+      upButton.textContent = "↑";
+      upButton.disabled = index === 0;
+      upButton.setAttribute("aria-label", `${getAiDisplayName(aiKey)} を上へ移動`);
+
+      const downButton = document.createElement("button");
+      downButton.type = "button";
+      downButton.className = "ai-order-button";
+      downButton.dataset.action = "down";
+      downButton.dataset.ai = aiKey;
+      downButton.textContent = "↓";
+      downButton.disabled = index === currentAiOrder.length - 1;
+      downButton.setAttribute("aria-label", `${getAiDisplayName(aiKey)} を下へ移動`);
+
+      controls.appendChild(upButton);
+      controls.appendChild(downButton);
+      item.appendChild(name);
+      item.appendChild(controls);
+      aiOrderList.appendChild(item);
+    });
+  }
 
   function setOpenRouterTestStatus(text, tone = "info") {
     openRouterTestStatus.textContent = text;
@@ -269,6 +370,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   async function restore() {
     const settings = await storage.getSettings();
 
+    currentAiOrder = normalizeAiOrder(settings.aiOrder);
+    renderAiOrderList();
+    applyAiOrderToConfigSections(currentAiOrder);
+
     baseUrlInput.value = settings.obsidian.baseUrl || "";
     tokenInput.value = settings.obsidian.token || "";
     rootPathInput.value = settings.obsidian.rootPath || "";
@@ -306,6 +411,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   async function save() {
     const partial = {
+      aiOrder: [...currentAiOrder],
       obsidian: {
         baseUrl: baseUrlInput.value.trim(),
         token: tokenInput.value.trim(),
@@ -421,6 +527,20 @@ document.addEventListener("DOMContentLoaded", async () => {
         "error"
       );
     });
+  });
+
+  aiOrderList?.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-action][data-ai]");
+    if (!button) return;
+    const aiKey = button.getAttribute("data-ai") || "";
+    const action = button.getAttribute("data-action") || "";
+    if (action === "up") {
+      moveAiOrder(aiKey, -1);
+      return;
+    }
+    if (action === "down") {
+      moveAiOrder(aiKey, 1);
+    }
   });
 });
 

@@ -2,6 +2,12 @@
   const constants = (typeof self !== "undefined" ? self : window).MirrorChatConstants || {};
   const STORAGE_KEY =
     constants.STORAGE_KEYS?.SETTINGS ?? "mirrorchatSettings";
+  const AI_KEYS = Array.isArray(constants.AI_KEYS)
+    ? constants.AI_KEYS
+    : ["chatgpt", "claude", "gemini", "grok"];
+  const AI_DEFAULT_ORDER = Array.isArray(constants.AI_DEFAULT_ORDER)
+    ? constants.AI_DEFAULT_ORDER
+    : ["gemini", "chatgpt", "claude", "grok"];
 
   function cloneAiConfigs(aiConfigs) {
     return Object.fromEntries(
@@ -10,6 +16,7 @@
   }
 
   const defaultSettings = {
+    aiOrder: [...AI_DEFAULT_ORDER],
     obsidian: {
       baseUrl: "http://127.0.0.1:27123/",
       token: "",
@@ -36,16 +43,57 @@
 
   async function getSettings() {
     const stored = await getStoredSettingsRaw();
-    return mergeDeep(defaultSettings, stored);
+    return sanitizeSettings(mergeDeep(defaultSettings, stored));
   }
 
   async function saveSettings(partial) {
     const stored = await getStoredSettingsRaw();
     const nextStored = mergeForStorage(stored, partial);
-    const resolved = mergeDeep(defaultSettings, nextStored);
+    if (
+      Object.prototype.hasOwnProperty.call(nextStored, "aiOrder") ||
+      Object.prototype.hasOwnProperty.call(partial || {}, "aiOrder") ||
+      Object.prototype.hasOwnProperty.call(stored, "aiOrder")
+    ) {
+      nextStored.aiOrder = normalizeAiOrder(nextStored.aiOrder);
+    }
+    const resolved = sanitizeSettings(mergeDeep(defaultSettings, nextStored));
     return new Promise((resolve) => {
       chrome.storage.sync.set({ [STORAGE_KEY]: nextStored }, () => resolve(resolved));
     });
+  }
+
+  function normalizeAiOrder(rawOrder) {
+    const validKeys = new Set(AI_KEYS);
+    const seen = new Set();
+    const ordered = [];
+    if (Array.isArray(rawOrder)) {
+      rawOrder.forEach((aiKey) => {
+        const key = String(aiKey || "").trim();
+        if (!key || !validKeys.has(key) || seen.has(key)) return;
+        seen.add(key);
+        ordered.push(key);
+      });
+    }
+    AI_DEFAULT_ORDER.forEach((aiKey) => {
+      if (validKeys.has(aiKey) && !seen.has(aiKey)) {
+        seen.add(aiKey);
+        ordered.push(aiKey);
+      }
+    });
+    AI_KEYS.forEach((aiKey) => {
+      if (!seen.has(aiKey)) {
+        seen.add(aiKey);
+        ordered.push(aiKey);
+      }
+    });
+    return ordered;
+  }
+
+  function sanitizeSettings(settings) {
+    return {
+      ...settings,
+      aiOrder: normalizeAiOrder(settings?.aiOrder)
+    };
   }
 
   function mergeDeep(target, source) {

@@ -1,5 +1,5 @@
 (function () {
-  const { AI_KEYS, STORAGE_KEYS } = self.MirrorChatConstants;
+  const { AI_KEYS, AI_DEFAULT_ORDER, STORAGE_KEYS } = self.MirrorChatConstants;
   const AI_TAB_IDS_KEY = STORAGE_KEYS.AI_TAB_IDS;
 
   const aiTabIds = {};
@@ -40,10 +40,46 @@
     return aiTabIds[aiKey] || null;
   }
 
+  function normalizeAiOrder(rawOrder) {
+    const validKeys = new Set(AI_KEYS);
+    const seen = new Set();
+    const ordered = [];
+    if (Array.isArray(rawOrder)) {
+      rawOrder.forEach((aiKey) => {
+        const key = String(aiKey || "").trim();
+        if (!key || !validKeys.has(key) || seen.has(key)) return;
+        seen.add(key);
+        ordered.push(key);
+      });
+    }
+    (AI_DEFAULT_ORDER || []).forEach((aiKey) => {
+      if (validKeys.has(aiKey) && !seen.has(aiKey)) {
+        seen.add(aiKey);
+        ordered.push(aiKey);
+      }
+    });
+    AI_KEYS.forEach((aiKey) => {
+      if (!seen.has(aiKey)) {
+        seen.add(aiKey);
+        ordered.push(aiKey);
+      }
+    });
+    return ordered;
+  }
+
   function resolveTargetAIs(rawEnabledAIs) {
-    if (typeof rawEnabledAIs === "undefined") return [...AI_KEYS];
+    if (typeof rawEnabledAIs === "undefined") return normalizeAiOrder(AI_DEFAULT_ORDER);
     if (!Array.isArray(rawEnabledAIs)) return [];
-    return AI_KEYS.filter((key) => rawEnabledAIs.includes(key));
+    const validKeys = new Set(AI_KEYS);
+    const seen = new Set();
+    const targetAIs = [];
+    rawEnabledAIs.forEach((aiKey) => {
+      const key = String(aiKey || "").trim();
+      if (!key || !validKeys.has(key) || seen.has(key)) return;
+      seen.add(key);
+      targetAIs.push(key);
+    });
+    return targetAIs;
   }
 
   async function openAITabs(settings, enabledAIs) {

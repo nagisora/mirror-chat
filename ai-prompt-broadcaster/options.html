@@ -62,8 +62,14 @@
       </section>
 
       <section>
-        <h2>各AIサイトのDOMセレクタ</h2>
+        <h2>AIモデル順</h2>
+        <p>ここで設定した順番は、ポップアップ表示順・タブを開く順・送信対象順・回答取得順に反映されます。</p>
+        <ul id="ai-order-list" class="ai-order-list"></ul>
+      </section>
 
+      <section id="ai-configs-section">
+        <h2>各AIサイトのDOMセレクタ</h2>
+        <div id="ai-config-list">
         <div class="ai-config" data-ai="chatgpt">
           <h3>ChatGPT</h3>
           <label>
@@ -214,6 +220,7 @@
               <input class="input-success-fallback-selector" type="text" placeholder="通常は空欄" />
             </label>
           </details>
+        </div>
         </div>
       </section>
 
