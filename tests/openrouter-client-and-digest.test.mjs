@@ -399,6 +399,111 @@ test("generateDigest reports catalog timeout fallback progress", async () => {
   assert.match(progressEvents[1].errorMessage, /free候補取得が 8 秒/);
 });
 
+test("runDigestPrompt shares the same fallback path and returns per-attempt diagnostics", async () => {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const fetchImpl = async (url, options) => {
+    if (String(url).endsWith("/models")) {
+      return new Response(JSON.stringify({ data: [
+        { id: "a/model:free", name: "Model A 70B", created: nowSec },
+        { id: "b/model:free", name: "Model B 70B", created: nowSec }
+      ] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    }
+    const body = JSON.parse(options.body);
+    if (body.model === "a/model:free") {
+      return new Response("rate limited", { status: 429, headers: { "content-type": "text/plain" } });
+    }
+    return new Response(
+      JSON.stringify({
+        choices: [{ message: { content: "- 要点\n- 補足\n- 追加" } }]
+      }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  };
+  const context = await loadScripts(
+    [
+      "./ai-prompt-broadcaster/openRouterFreeModels.js",
+      "./ai-prompt-broadcaster/openRouterClient.js",
+      "./ai-prompt-broadcaster/digestService.js"
+    ],
+    { fetch: fetchImpl }
+  );
+  const digestService = context.self.MirrorChatDigestService;
+
+  const result = await digestService.runDigestPrompt({
+    prompt: digestService.buildDigestDiagnosticPrompt(),
+    settings: {
+      openrouter: {
+        apiKey: "test"
+      }
+    },
+    fetchImpl,
+    attemptLimit: 4
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.modelId, "b/model:free");
+  assert.equal(result.candidateResolution.source, "catalog");
+  assert.deepEqual(Array.from(result.candidateResolution.attemptedCandidates), ["a/model:free", "b/model:free"]);
+  assert.equal(result.attemptResults.length, 2);
+  assert.equal(result.attemptResults[0].ok, false);
+  assert.equal(result.attemptResults[0].kind, "rateLimit");
+  assert.equal(result.attemptResults[0].diagnostic.response.status, 429);
+  assert.equal(result.attemptResults[1].ok, true);
+  assert.equal(result.attemptResults[1].diagnostic.response.status, 200);
+});
+
+test("runDigestPrompt can target a requested model without refreshing catalog", async () => {
+  let modelCatalogFetches = 0;
+  const fetchImpl = async (url) => {
+    if (String(url).endsWith("/models")) {
+      modelCatalogFetches += 1;
+      return new Response(JSON.stringify({ data: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    }
+    return new Response(
+      JSON.stringify({
+        choices: [{ message: { content: "- requested model ok" } }]
+      }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  };
+  const context = await loadScripts(
+    [
+      "./ai-prompt-broadcaster/openRouterFreeModels.js",
+      "./ai-prompt-broadcaster/openRouterClient.js",
+      "./ai-prompt-broadcaster/digestService.js"
+    ],
+    { fetch: fetchImpl }
+  );
+  const digestService = context.self.MirrorChatDigestService;
+
+  const result = await digestService.runDigestPrompt({
+    prompt: digestService.buildDigestDiagnosticPrompt(),
+    settings: {
+      openrouter: {
+        apiKey: "test",
+        freeModelCandidatesOverride: ["stored/model:free"]
+      }
+    },
+    requestedModel: "requested/model:free",
+    fetchImpl,
+    attemptLimit: 4
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.modelId, "requested/model:free");
+  assert.equal(result.candidateResolution.source, "requested");
+  assert.deepEqual(Array.from(result.candidateResolution.attemptedCandidates), ["requested/model:free"]);
+  assert.equal(modelCatalogFetches, 0);
+  assert.equal(result.attemptResults.length, 1);
+  assert.equal(result.attemptResults[0].ok, true);
+});
+
 test("buildDigestPrompt compacts long source text", async () => {
   const context = await loadScripts(
     [

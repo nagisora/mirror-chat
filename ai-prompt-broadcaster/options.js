@@ -1,5 +1,4 @@
 document.addEventListener("DOMContentLoaded", async () => {
-  const OPENROUTER_TEST_TIMEOUT_MS = 15000;
   const OPENROUTER_TEST_ATTEMPT_LIMIT = 4;
 
   const baseUrlInput = document.getElementById("obsidian-base-url");
@@ -56,27 +55,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       .join("\n");
   }
 
-  function buildDiagnosticPrompt() {
-    if (digestService?.buildDigestPrompt) {
-      return digestService.buildDigestPrompt(
-        "MirrorChat の digest 診断です。各回答の要点を短く整理してください。",
-        [
-          { name: "ChatGPT", markdown: "- 要点A\n- 補足B", error: "" },
-          { name: "Claude", markdown: "- 観点C\n- 気になる点D", error: "" }
-        ]
-      );
-    }
-    return {
-      systemPrompt: "複数AI回答を日本語で短く整理してください。Markdownのみで出力してください。",
-      userPrompt: "## 質問\nMirrorChat の digest 診断です。\n\n## 各AI回答\n### ChatGPT\n- 要点A\n\n### Claude\n- 観点B"
-    };
-  }
-
-  function buildCandidateListForDiagnostic({ preferredModel, candidates }) {
-    const ordered = openRouterFreeModels.buildCandidateList({ preferredModel, candidates });
-    return ordered.slice(0, OPENROUTER_TEST_ATTEMPT_LIMIT);
-  }
-
   function populateTestModelSuggestions(settings) {
     const candidates = openRouterFreeModels.buildKnownFreeModelList({
       preferredModel: settings?.openrouter?.preferredModel,
@@ -112,10 +90,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const preferredModel = openRouterPreferredModelInput.value.trim();
     const requestedTestModel = openRouterTestModelInput.value.trim();
-    const storedCandidates = Array.isArray(settings?.openrouter?.freeModelCandidatesOverride)
-      ? settings.openrouter.freeModelCandidatesOverride
-      : [];
-    const prompt = buildDiagnosticPrompt();
+    const prompt = digestService?.buildDigestDiagnosticPrompt
+      ? digestService.buildDigestDiagnosticPrompt()
+      : {
+          systemPrompt: "複数AI回答を日本語で短く整理してください。Markdownのみで出力してください。",
+          userPrompt: "## 質問\nMirrorChat の digest 診断です。\n\n## 各AI回答\n### ChatGPT\n- 要点A\n\n### Claude\n- 観点B"
+        };
     const logLines = [];
     const appendLog = (line = "") => {
       logLines.push(line);
@@ -132,59 +112,51 @@ document.addEventListener("DOMContentLoaded", async () => {
       appendLog(
         `[設定] preferredModel=${preferredModel || "(自動選択)"} / testModel=${requestedTestModel || "(自動候補順)"}`
       );
+      const diagnosticRun = await digestService.runDigestPrompt({
+        prompt,
+        settings,
+        apiKey,
+        preferredModel,
+        requestedModel: requestedTestModel,
+        fetchImpl: fetch,
+        attemptLimit: OPENROUTER_TEST_ATTEMPT_LIMIT
+      });
+      const runtime = diagnosticRun?.candidateResolution?.runtime || {};
       appendLog(
-        `[リクエスト] timeout=${OPENROUTER_TEST_TIMEOUT_MS}ms / systemPrompt=${prompt.systemPrompt.length} chars / userPrompt=${prompt.userPrompt.length} chars`
+        `[リクエスト] timeout=${runtime.timeoutMs || 0}ms / systemPrompt=${prompt.systemPrompt.length} chars / userPrompt=${prompt.userPrompt.length} chars`
       );
 
-      let diagnosticCandidates = [];
-      if (requestedTestModel) {
-        diagnosticCandidates = [requestedTestModel];
+      if (diagnosticRun.candidateResolution?.source === "requested") {
         appendLog("");
         appendLog(`[候補指定] 手動指定モデルをテストします: ${requestedTestModel}`);
       } else {
-        try {
-          appendLog("");
-          appendLog("[候補取得] /models を確認しています...");
-          const catalog = await openRouterClient.fetchModelsCatalog({
-            apiKey,
-            fetchImpl: fetch,
-            timeoutMs: 8000
-          });
-          const refreshed = openRouterFreeModels.refreshDigestFreeModels({
-            catalog,
-            preferredModel
-          });
-          diagnosticCandidates = buildCandidateListForDiagnostic({
-            preferredModel,
-            candidates: refreshed.candidates
-          });
-          appendLog(`[候補取得] 成功: catalog=${catalog.length}件 / 診断候補=${diagnosticCandidates.length}件`);
-        } catch (error) {
-          diagnosticCandidates = buildCandidateListForDiagnostic({
-            preferredModel,
-            candidates: storedCandidates
-          });
-          appendLog(`[候補取得] 失敗: ${error instanceof Error ? error.message : String(error)}`);
-          appendLog(`[候補取得] 保存済み/既定候補で続行: ${diagnosticCandidates.length}件`);
+        appendLog("");
+        appendLog("[候補取得] /models を確認しています...");
+        if (diagnosticRun.candidateResolution?.source === "catalog") {
+          appendLog(
+            `[候補取得] 成功: catalog=${diagnosticRun.refreshedStats?.catalogCount ?? 0}件 / 診断候補=${diagnosticRun.candidateResolution?.attemptedCandidates?.length ?? 0}件`
+          );
+        } else {
+          appendLog(
+            `[候補取得] 失敗: ${diagnosticRun.candidateResolution?.catalogError?.error || diagnosticRun.error || "不明なエラー"}`
+          );
+          appendLog(
+            `[候補取得] 保存済み/既定候補で続行: ${diagnosticRun.candidateResolution?.attemptedCandidates?.length ?? 0}件`
+          );
         }
       }
 
+      const diagnosticCandidates = Array.isArray(diagnosticRun.candidateResolution?.attemptedCandidates)
+        ? diagnosticRun.candidateResolution.attemptedCandidates
+        : [];
       appendLog(`[候補順] ${diagnosticCandidates.join(", ")}`);
 
-      let successModelId = "";
-      for (let index = 0; index < diagnosticCandidates.length; index += 1) {
-        const modelId = diagnosticCandidates[index];
-        appendLog("");
-        appendLog(`[試行 ${index + 1}/${diagnosticCandidates.length}] ${modelId}`);
+      for (let index = 0; index < diagnosticRun.attemptResults.length; index += 1) {
+        const attemptResult = diagnosticRun.attemptResults[index];
+        const diagnostic = attemptResult.diagnostic;
 
-        const diagnostic = await openRouterClient.diagnoseChatCompletion({
-          apiKey,
-          modelId,
-          systemPrompt: prompt.systemPrompt,
-          userPrompt: prompt.userPrompt,
-          fetchImpl: fetch,
-          timeoutMs: OPENROUTER_TEST_TIMEOUT_MS
-        });
+        appendLog("");
+        appendLog(`[試行 ${index + 1}/${diagnosticCandidates.length}] ${attemptResult.modelId}`);
 
         appendLog(
           diagnostic.response
@@ -207,13 +179,12 @@ document.addEventListener("DOMContentLoaded", async () => {
           }
         }
 
-        if (diagnostic.ok) {
-          successModelId = modelId;
+        if (attemptResult.ok) {
           appendLog(`[結果] 成功: ${truncateText(diagnostic.text)}`);
           break;
         }
 
-        appendLog(`[結果] 失敗: ${diagnostic.error || "不明なエラー"}`);
+        appendLog(`[結果] 失敗: ${attemptResult.error || "不明なエラー"}`);
         if (diagnostic.analysis?.reasoning) {
           appendLog(`[reasoning] ${truncateText(diagnostic.analysis.reasoning)}`);
         }
@@ -223,9 +194,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
       }
 
-      if (successModelId) {
-        setOpenRouterTestStatus(`テスト成功: ${successModelId}`, "success");
+      if (diagnosticRun.ok) {
+        setOpenRouterTestStatus(`テスト成功: ${diagnosticRun.modelId}`, "success");
       } else {
+        if (diagnosticRun.attemptResults.length === 0) {
+          appendLog("");
+          appendLog(`[結果] 失敗: ${diagnosticRun.error || "不明なエラー"}`);
+        }
         setOpenRouterTestStatus("全候補で失敗しました。ログを確認してください。", "error");
       }
     } catch (error) {
