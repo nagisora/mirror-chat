@@ -1,5 +1,6 @@
 importScripts(
   "constants.js",
+  "aiOrderUtils.js",
   "storage.js",
   "obsidianClient.js",
   "openRouterFreeModels.js",
@@ -12,10 +13,11 @@ importScripts(
   "aiCommunication.js"
 );
 
-const { AI_KEYS, AI_DEFAULT_ORDER, STORAGE_KEYS, MESSAGE_TYPES } = self.MirrorChatConstants;
+const { STORAGE_KEYS, MESSAGE_TYPES } = self.MirrorChatConstants;
 const CURRENT_TASK_KEY = STORAGE_KEYS.CURRENT_TASK;
 const LAST_SAVED_FOLDER_KEY = STORAGE_KEYS.LAST_SAVED_FOLDER;
 const LAST_NOTE_SNAPSHOT_KEY = STORAGE_KEYS.LAST_NOTE_SNAPSHOT;
+const aiOrderUtils = self.MirrorChatAIOrderUtils;
 
 const NOTIFICATION_ICON_URL = chrome.runtime.getURL("icon128.png");
 
@@ -155,47 +157,8 @@ async function runDigestFollowUp({ question, results, settings, notePath }) {
   sendDigestStatus(`digest を反映しました。使用モデル: ${digestResult.modelId}`, { tone: "success" });
 }
 
-function normalizeAiOrder(rawOrder) {
-  const validKeys = new Set(AI_KEYS);
-  const seen = new Set();
-  const ordered = [];
-  if (Array.isArray(rawOrder)) {
-    rawOrder.forEach((aiKey) => {
-      const key = String(aiKey || "").trim();
-      if (!key || !validKeys.has(key) || seen.has(key)) return;
-      seen.add(key);
-      ordered.push(key);
-    });
-  }
-  (AI_DEFAULT_ORDER || []).forEach((aiKey) => {
-    if (validKeys.has(aiKey) && !seen.has(aiKey)) {
-      seen.add(aiKey);
-      ordered.push(aiKey);
-    }
-  });
-  AI_KEYS.forEach((aiKey) => {
-    if (!seen.has(aiKey)) {
-      seen.add(aiKey);
-      ordered.push(aiKey);
-    }
-  });
-  return ordered;
-}
-
 function resolveEnabledAIs(rawEnabledAIs, aiOrder) {
-  const validKeys = new Set(AI_KEYS);
-  const normalizedOrder = normalizeAiOrder(aiOrder);
-  if (typeof rawEnabledAIs === "undefined") return normalizedOrder;
-  if (!Array.isArray(rawEnabledAIs)) return [];
-  const seen = new Set();
-  const enabled = [];
-  rawEnabledAIs.forEach((aiKey) => {
-    const key = String(aiKey || "").trim();
-    if (!key || !validKeys.has(key) || seen.has(key)) return;
-    seen.add(key);
-    enabled.push(key);
-  });
-  return enabled;
+  return aiOrderUtils.resolveEnabledAIs(rawEnabledAIs, aiOrder);
 }
 
 tabManager.setStatusNotifier(aiCommunication.notifyAIStatus);

@@ -37,6 +37,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   const constants = window.MirrorChatConstants || {};
   const AI_KEYS = constants.AI_KEYS ?? ["chatgpt", "claude", "gemini", "grok"];
   const AI_DEFAULT_ORDER = constants.AI_DEFAULT_ORDER ?? ["gemini", "chatgpt", "claude", "grok"];
+  const aiOrderUtils = window.MirrorChatAIOrderUtils;
+  const normalizeAiOrder = aiOrderUtils.normalizeAiOrder;
+  const resolveEnabledAIs = aiOrderUtils.resolveEnabledAIs;
+  const normalizeEnabledAiMap = aiOrderUtils.normalizeEnabledAiMap;
+  const getDefaultEnabledAiMap = aiOrderUtils.getDefaultEnabledAiMap;
   const MESSAGE_TYPES = constants.MESSAGE_TYPES || {};
   const currentTaskKey = constants.STORAGE_KEYS?.CURRENT_TASK ?? "mirrorchatCurrentTask";
   const failedItemsKey = constants.STORAGE_KEYS?.FAILED_ITEMS ?? "mirrorchatFailedItems";
@@ -66,33 +71,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     tabItems[key] = tabStatus?.querySelector('.tab-item[data-ai="' + key + '"]') || null;
   });
 
-  function normalizeAiOrder(rawOrder) {
-    const validKeys = new Set(AI_KEYS);
-    const seen = new Set();
-    const ordered = [];
-    if (Array.isArray(rawOrder)) {
-      rawOrder.forEach((aiKey) => {
-        const key = String(aiKey || "").trim();
-        if (!key || !validKeys.has(key) || seen.has(key)) return;
-        seen.add(key);
-        ordered.push(key);
-      });
-    }
-    AI_DEFAULT_ORDER.forEach((aiKey) => {
-      if (validKeys.has(aiKey) && !seen.has(aiKey)) {
-        seen.add(aiKey);
-        ordered.push(aiKey);
-      }
-    });
-    AI_KEYS.forEach((aiKey) => {
-      if (!seen.has(aiKey)) {
-        seen.add(aiKey);
-        ordered.push(aiKey);
-      }
-    });
-    return ordered;
-  }
-
   function applyAiOrderToTabItems(aiOrder) {
     const normalized = normalizeAiOrder(aiOrder);
     normalized.forEach((aiKey) => {
@@ -105,20 +83,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function normalizeEnabledAIs(enabledAIs, aiOrder) {
-    const ordered = normalizeAiOrder(aiOrder);
-    const next = {};
-    ordered.forEach((key) => {
-      next[key] = typeof enabledAIs?.[key] === "boolean" ? enabledAIs[key] : true;
-    });
-    return next;
+    return normalizeEnabledAiMap(enabledAIs, aiOrder);
   }
 
   function getDefaultEnabledAIs(aiOrder = AI_DEFAULT_ORDER) {
-    return Object.fromEntries(normalizeAiOrder(aiOrder).map((key) => [key, true]));
+    return getDefaultEnabledAiMap(aiOrder);
   }
 
   function getSelectedAIs(enabledAIs, aiOrder = appState.aiOrder) {
-    return normalizeAiOrder(aiOrder).filter((key) => !!enabledAIs[key]);
+    return resolveEnabledAIs(
+      normalizeAiOrder(aiOrder).filter((key) => !!enabledAIs[key]),
+      aiOrder
+    );
   }
 
   const appState = {

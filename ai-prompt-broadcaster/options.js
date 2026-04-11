@@ -25,40 +25,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   const openRouterFreeModels = window.MirrorChatOpenRouterFreeModels;
   const digestService = window.MirrorChatDigestService;
   const constants = window.MirrorChatConstants || {};
-  const AI_KEYS = constants.AI_KEYS || ["chatgpt", "claude", "gemini", "grok"];
   const AI_DEFAULT_ORDER = constants.AI_DEFAULT_ORDER || ["gemini", "chatgpt", "claude", "grok"];
   const AI_CONFIG_DEFAULTS = constants.AI_CONFIG_DEFAULTS || {};
+  const aiOrderUtils = window.MirrorChatAIOrderUtils;
+  const normalizeAiOrder = aiOrderUtils.normalizeAiOrder;
   const MESSAGE_TYPES = window.MirrorChatConstants?.MESSAGE_TYPES || {};
   const MSG_RETRY = MESSAGE_TYPES.RETRY || "MIRRORCHAT_RETRY";
 
   let currentAiOrder = normalizeAiOrder(AI_DEFAULT_ORDER);
-
-  function normalizeAiOrder(rawOrder) {
-    const validKeys = new Set(AI_KEYS);
-    const seen = new Set();
-    const ordered = [];
-    if (Array.isArray(rawOrder)) {
-      rawOrder.forEach((aiKey) => {
-        const key = String(aiKey || "").trim();
-        if (!key || !validKeys.has(key) || seen.has(key)) return;
-        seen.add(key);
-        ordered.push(key);
-      });
-    }
-    AI_DEFAULT_ORDER.forEach((aiKey) => {
-      if (validKeys.has(aiKey) && !seen.has(aiKey)) {
-        seen.add(aiKey);
-        ordered.push(aiKey);
-      }
-    });
-    AI_KEYS.forEach((aiKey) => {
-      if (!seen.has(aiKey)) {
-        seen.add(aiKey);
-        ordered.push(aiKey);
-      }
-    });
-    return ordered;
-  }
 
   function getAiDisplayName(aiKey) {
     return AI_CONFIG_DEFAULTS?.[aiKey]?.name || aiKey;

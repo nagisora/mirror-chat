@@ -8,6 +8,37 @@
   const AI_DEFAULT_ORDER = Array.isArray(constants.AI_DEFAULT_ORDER)
     ? constants.AI_DEFAULT_ORDER
     : ["gemini", "chatgpt", "claude", "grok"];
+  const aiOrderUtils = (typeof self !== "undefined" ? self : window).MirrorChatAIOrderUtils;
+
+  function normalizeAiOrder(rawOrder) {
+    if (aiOrderUtils?.normalizeAiOrder) {
+      return aiOrderUtils.normalizeAiOrder(rawOrder);
+    }
+    const validKeys = new Set(AI_KEYS);
+    const seen = new Set();
+    const ordered = [];
+    if (Array.isArray(rawOrder)) {
+      rawOrder.forEach((aiKey) => {
+        const key = String(aiKey || "").trim();
+        if (!key || !validKeys.has(key) || seen.has(key)) return;
+        seen.add(key);
+        ordered.push(key);
+      });
+    }
+    AI_DEFAULT_ORDER.forEach((aiKey) => {
+      if (validKeys.has(aiKey) && !seen.has(aiKey)) {
+        seen.add(aiKey);
+        ordered.push(aiKey);
+      }
+    });
+    AI_KEYS.forEach((aiKey) => {
+      if (!seen.has(aiKey)) {
+        seen.add(aiKey);
+        ordered.push(aiKey);
+      }
+    });
+    return ordered;
+  }
 
   function cloneAiConfigs(aiConfigs) {
     return Object.fromEntries(
@@ -60,33 +91,6 @@
     return new Promise((resolve) => {
       chrome.storage.sync.set({ [STORAGE_KEY]: nextStored }, () => resolve(resolved));
     });
-  }
-
-  function normalizeAiOrder(rawOrder) {
-    const validKeys = new Set(AI_KEYS);
-    const seen = new Set();
-    const ordered = [];
-    if (Array.isArray(rawOrder)) {
-      rawOrder.forEach((aiKey) => {
-        const key = String(aiKey || "").trim();
-        if (!key || !validKeys.has(key) || seen.has(key)) return;
-        seen.add(key);
-        ordered.push(key);
-      });
-    }
-    AI_DEFAULT_ORDER.forEach((aiKey) => {
-      if (validKeys.has(aiKey) && !seen.has(aiKey)) {
-        seen.add(aiKey);
-        ordered.push(aiKey);
-      }
-    });
-    AI_KEYS.forEach((aiKey) => {
-      if (!seen.has(aiKey)) {
-        seen.add(aiKey);
-        ordered.push(aiKey);
-      }
-    });
-    return ordered;
   }
 
   function sanitizeSettings(settings) {
