@@ -28,6 +28,11 @@ test.describe("MirrorChat 拡張機能", () => {
     await expect(aiCheckboxes.nth(1)).toBeChecked();
     await expect(aiCheckboxes.nth(2)).toBeChecked();
     await expect(aiCheckboxes.nth(3)).toBeChecked();
+
+    const aiOrder = await page.locator(".tab-item .tab-name").evaluateAll((nodes) =>
+      nodes.map((node) => node.textContent?.trim() || "")
+    );
+    expect(aiOrder).toEqual(["Gemini", "ChatGPT", "Claude", "Grok"]);
   });
 
   test("使用するAIを全て外すとサイトを開けない", async ({ page, extensionId }) => {
@@ -218,6 +223,39 @@ test.describe("MirrorChat 拡張機能", () => {
     await expect(page.locator("#openrouter-api-key")).toHaveValue("sk-or-test");
     await page.locator("details.advanced-settings").nth(0).locator("summary").click();
     await expect(page.locator("#openrouter-preferred-model")).toHaveValue("google/gemma-3-27b-it:free");
+  });
+
+  test("AIモデル順を保存すると options と popup の順番に反映される", async ({ page, extensionId }) => {
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+
+    // 既定順: Gemini, ChatGPT, Claude, Grok
+    const moveGrokUp = page.locator("#ai-order-list .ai-order-item").filter({ hasText: "Grok" }).locator("button[data-action='up']");
+    await moveGrokUp.click();
+    await moveGrokUp.click();
+    await moveGrokUp.click();
+
+    await page.locator("#save-button").click();
+    await expect(page.locator("#status")).toContainText("保存しました", {
+      timeout: 5_000,
+    });
+
+    await page.reload();
+
+    const optionOrder = await page.locator("#ai-order-list .ai-order-name").evaluateAll((nodes) =>
+      nodes.map((node) => node.textContent?.trim() || "")
+    );
+    expect(optionOrder).toEqual(["Grok", "Gemini", "ChatGPT", "Claude"]);
+
+    const configOrder = await page.locator("#ai-config-list .ai-config h3").evaluateAll((nodes) =>
+      nodes.map((node) => node.textContent?.trim() || "")
+    );
+    expect(configOrder).toEqual(["Grok", "Gemini", "ChatGPT", "Claude"]);
+
+    await page.goto(`chrome-extension://${extensionId}/popup.html?standalone=1`);
+    const popupOrder = await page.locator(".tab-item .tab-name").evaluateAll((nodes) =>
+      nodes.map((node) => node.textContent?.trim() || "")
+    );
+    expect(popupOrder).toEqual(["Grok", "Gemini", "ChatGPT", "Claude"]);
   });
 
   test("直近ノートがあれば再保存と digest再生成を実行できる", async ({ page, extensionId }) => {

@@ -125,3 +125,33 @@ button {
   line-height: 1.5;
 }
 
+.ai-order-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ai-order-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px;
+  margin-bottom: 8px;
+}
+
+.ai-order-name {
+  font-weight: 600;
+}
+
+.ai-order-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.ai-order-button {
+  min-width: 36px;
+  padding: 4px 8px;
+}
+

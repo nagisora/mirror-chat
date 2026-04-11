@@ -1,6 +1,7 @@
 (function () {
-  const { AI_KEYS, STORAGE_KEYS } = self.MirrorChatConstants;
+  const { AI_KEYS, AI_DEFAULT_ORDER, STORAGE_KEYS } = self.MirrorChatConstants;
   const AI_TAB_IDS_KEY = STORAGE_KEYS.AI_TAB_IDS;
+  const aiOrderUtils = self.MirrorChatAIOrderUtils;
 
   const aiTabIds = {};
   let statusNotifier = () => {};
@@ -41,9 +42,7 @@
   }
 
   function resolveTargetAIs(rawEnabledAIs) {
-    if (typeof rawEnabledAIs === "undefined") return [...AI_KEYS];
-    if (!Array.isArray(rawEnabledAIs)) return [];
-    return AI_KEYS.filter((key) => rawEnabledAIs.includes(key));
+    return aiOrderUtils.resolveEnabledAIs(rawEnabledAIs, AI_DEFAULT_ORDER);
   }
 
   async function openAITabs(settings, enabledAIs) {

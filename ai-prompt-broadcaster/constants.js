@@ -4,6 +4,7 @@
  */
 (function () {
   const AI_KEYS = ["chatgpt", "claude", "gemini", "grok"];
+  const AI_DEFAULT_ORDER = ["gemini", "chatgpt", "claude", "grok"];
 
   const STORAGE_KEYS = {
     FAILED_ITEMS: "mirrorchatFailedItems",
@@ -148,6 +149,7 @@
   const target = typeof window !== "undefined" ? window : self;
   target.MirrorChatConstants = {
     AI_KEYS,
+    AI_DEFAULT_ORDER,
     STORAGE_KEYS,
     MESSAGE_TYPES,
     TIMEOUT_MS,
