@@ -113,6 +113,102 @@
     return normalized.slice(0, Math.floor(attemptLimit));
   }
 
+  function toErrorText(error) {
+    return error instanceof Error ? error.message : String(error || "Unknown error");
+  }
+
+  async function emitProgress(onProgress, payload) {
+    if (typeof onProgress !== "function") return;
+    await onProgress(payload);
+  }
+
+  function buildRunContext({ prompt, settings, preferredModel, requestedModel, apiKey, timeoutMs, catalogTimeoutMs, attemptLimit }) {
+    const resolvedApiKey = String(apiKey || settings?.openrouter?.apiKey || "").trim();
+    const resolvedPreferredModel = String(preferredModel || settings?.openrouter?.preferredModel || "").trim();
+    const resolvedRequestedModel = String(requestedModel || "").trim();
+    return {
+      resolvedApiKey,
+      resolvedPreferredModel,
+      resolvedRequestedModel,
+      systemPrompt: String(prompt?.systemPrompt || ""),
+      userPrompt: String(prompt?.userPrompt || ""),
+      candidateResolution: {
+        source: resolvedRequestedModel ? "requested" : "stored",
+        preferredModel: resolvedPreferredModel,
+        requestedModel: resolvedRequestedModel,
+        attemptedCandidates: [],
+        runtime: {
+          timeoutMs,
+          catalogTimeoutMs,
+          attemptLimit: Number.isFinite(attemptLimit) && attemptLimit > 0 ? Math.floor(attemptLimit) : null
+        },
+        catalogError: null
+      }
+    };
+  }
+
+  async function resolveRunCandidates({
+    settings,
+    fetchImpl,
+    onProgress,
+    resolvedApiKey,
+    resolvedPreferredModel,
+    resolvedRequestedModel,
+    catalogTimeoutMs,
+    candidateResolution
+  }) {
+    let resolvedCandidates = settings?.openrouter?.freeModelCandidatesOverride;
+    let refreshedCandidates = [];
+    let refreshedStats = {};
+
+    if (resolvedRequestedModel) {
+      return {
+        resolvedCandidates: [resolvedRequestedModel],
+        refreshedCandidates,
+        refreshedStats
+      };
+    }
+
+    try {
+      await emitProgress(onProgress, {
+        stage: "catalog-start",
+        message: "digest の free候補を確認しています..."
+      });
+
+      const catalog = await openRouterClient.fetchModelsCatalog({
+        apiKey: resolvedApiKey,
+        fetchImpl,
+        timeoutMs: catalogTimeoutMs
+      });
+      const refreshed = freeModelSelector.refreshDigestFreeModels({
+        catalog,
+        preferredModel: resolvedPreferredModel
+      });
+      resolvedCandidates = refreshed.candidates;
+      refreshedCandidates = refreshed.candidates;
+      refreshedStats = refreshed.stats || {};
+      candidateResolution.source = "catalog";
+      return { resolvedCandidates, refreshedCandidates, refreshedStats };
+    } catch (error) {
+      const kind = freeModelSelector.classifyOpenRouterError(error);
+      const errorText = toErrorText(error);
+      candidateResolution.source = "stored";
+      candidateResolution.catalogError = {
+        kind,
+        error: errorText,
+        errorMessage: summarizeCatalogError({ kind, message: errorText })
+      };
+      await emitProgress(onProgress, {
+        stage: "catalog-failure",
+        kind,
+        error: errorText,
+        message: "free候補の取得に失敗したため、保存済み候補で digest を続行します。",
+        errorMessage: candidateResolution.catalogError.errorMessage
+      });
+      return { resolvedCandidates, refreshedCandidates, refreshedStats };
+    }
+  }
+
   async function runDigestPrompt({
     prompt,
     settings,
@@ -125,23 +221,24 @@
     catalogTimeoutMs = DIGEST_CATALOG_TIMEOUT_MS,
     attemptLimit = 0
   }) {
-    const resolvedApiKey = String(apiKey || settings?.openrouter?.apiKey || "").trim();
-    const resolvedPreferredModel = String(preferredModel || settings?.openrouter?.preferredModel || "").trim();
-    const resolvedRequestedModel = String(requestedModel || "").trim();
-    const systemPrompt = String(prompt?.systemPrompt || "");
-    const userPrompt = String(prompt?.userPrompt || "");
-    const candidateResolution = {
-      source: resolvedRequestedModel ? "requested" : "stored",
-      preferredModel: resolvedPreferredModel,
-      requestedModel: resolvedRequestedModel,
-      attemptedCandidates: [],
-      runtime: {
-        timeoutMs,
-        catalogTimeoutMs,
-        attemptLimit: Number.isFinite(attemptLimit) && attemptLimit > 0 ? Math.floor(attemptLimit) : null
-      },
-      catalogError: null
-    };
+    const context = buildRunContext({
+      prompt,
+      settings,
+      preferredModel,
+      requestedModel,
+      apiKey,
+      timeoutMs,
+      catalogTimeoutMs,
+      attemptLimit
+    });
+    const {
+      resolvedApiKey,
+      resolvedPreferredModel,
+      resolvedRequestedModel,
+      systemPrompt,
+      userPrompt,
+      candidateResolution
+    } = context;
 
     if (!resolvedApiKey) {
       return {
@@ -155,54 +252,20 @@
       };
     }
 
-    let resolvedCandidates = settings?.openrouter?.freeModelCandidatesOverride;
-    let refreshedCandidates = [];
-    let refreshedStats = {};
-
-    if (resolvedRequestedModel) {
-      resolvedCandidates = [resolvedRequestedModel];
-    } else {
-      try {
-        if (typeof onProgress === "function") {
-          await onProgress({
-            stage: "catalog-start",
-            message: "digest の free候補を確認しています..."
-          });
-        }
-
-        const catalog = await openRouterClient.fetchModelsCatalog({
-          apiKey: resolvedApiKey,
-          fetchImpl,
-          timeoutMs: catalogTimeoutMs
-        });
-        const refreshed = freeModelSelector.refreshDigestFreeModels({
-          catalog,
-          preferredModel: resolvedPreferredModel
-        });
-        resolvedCandidates = refreshed.candidates;
-        refreshedCandidates = refreshed.candidates;
-        refreshedStats = refreshed.stats || {};
-        candidateResolution.source = "catalog";
-      } catch (error) {
-        const kind = freeModelSelector.classifyOpenRouterError(error);
-        const errorText = error instanceof Error ? error.message : String(error || "Unknown error");
-        candidateResolution.source = "stored";
-        candidateResolution.catalogError = {
-          kind,
-          error: errorText,
-          errorMessage: summarizeCatalogError({ kind, message: errorText })
-        };
-        if (typeof onProgress === "function") {
-          await onProgress({
-            stage: "catalog-failure",
-            kind,
-            error: errorText,
-            message: "free候補の取得に失敗したため、保存済み候補で digest を続行します。",
-            errorMessage: candidateResolution.catalogError.errorMessage
-          });
-        }
-      }
-    }
+    const {
+      resolvedCandidates,
+      refreshedCandidates,
+      refreshedStats
+    } = await resolveRunCandidates({
+      settings,
+      fetchImpl,
+      onProgress,
+      resolvedApiKey,
+      resolvedPreferredModel,
+      resolvedRequestedModel,
+      catalogTimeoutMs,
+      candidateResolution
+    });
 
     const orderedCandidates = resolvedRequestedModel
       ? [resolvedRequestedModel]
@@ -219,20 +282,18 @@
 
     for (const modelId of attemptCandidates) {
       const previousFailure = Array.isArray(attempts) && attempts.length > 0 ? attempts[attempts.length - 1] : null;
-      if (typeof onProgress === "function") {
-        await onProgress({
-          stage: "attempt-start",
-          modelId,
-          message: `digest を生成しています... (${modelId})`,
-          errorMessage: previousFailure
-            ? summarizeAttemptError({
-                modelId: previousFailure.modelId,
-                kind: previousFailure.kind,
-                message: previousFailure.error
-              })
-            : ""
-        });
-      }
+      await emitProgress(onProgress, {
+        stage: "attempt-start",
+        modelId,
+        message: `digest を生成しています... (${modelId})`,
+        errorMessage: previousFailure
+          ? summarizeAttemptError({
+              modelId: previousFailure.modelId,
+              kind: previousFailure.kind,
+              message: previousFailure.error
+            })
+          : ""
+      });
 
       const diagnostic = await openRouterClient.diagnoseChatCompletion({
         apiKey: resolvedApiKey,
@@ -276,16 +337,14 @@
         error: failure.error,
         diagnostic
       });
-      if (typeof onProgress === "function") {
-        await onProgress({
-          stage: "attempt-failure",
-          modelId,
-          kind: failure.kind,
-          error: failure.error,
-          message: `digest を生成しています... (${modelId})`,
-          errorMessage: summarizeAttemptError({ modelId, kind: failure.kind, message: failure.error })
-        });
-      }
+      await emitProgress(onProgress, {
+        stage: "attempt-failure",
+        modelId,
+        kind: failure.kind,
+        error: failure.error,
+        message: `digest を生成しています... (${modelId})`,
+        errorMessage: summarizeAttemptError({ modelId, kind: failure.kind, message: failure.error })
+      });
       lastError = failure.error;
     }
 
