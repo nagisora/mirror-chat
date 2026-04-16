@@ -2,6 +2,9 @@ importScripts(
   "constants.js",
   "aiOrderUtils.js",
   "storage.js",
+  "currentTaskManager.js",
+  "lastNoteSnapshotManager.js",
+  "offscreenManager.js",
   "obsidianClient.js",
   "openRouterFreeModels.js",
   "openRouterClient.js",
@@ -14,9 +17,7 @@ importScripts(
 );
 
 const { STORAGE_KEYS, MESSAGE_TYPES } = self.MirrorChatConstants;
-const CURRENT_TASK_KEY = STORAGE_KEYS.CURRENT_TASK;
 const LAST_SAVED_FOLDER_KEY = STORAGE_KEYS.LAST_SAVED_FOLDER;
-const LAST_NOTE_SNAPSHOT_KEY = STORAGE_KEYS.LAST_NOTE_SNAPSHOT;
 const aiOrderUtils = self.MirrorChatAIOrderUtils;
 
 const NOTIFICATION_ICON_URL = chrome.runtime.getURL("icon128.png");
@@ -39,6 +40,9 @@ const obsidianStorage = self.MirrorChatObsidianStorage;
 const tabManager = self.MirrorChatTabManager;
 const aiCommunication = self.MirrorChatAICommunication;
 const digestService = self.MirrorChatDigestService;
+const currentTaskManager = self.MirrorChatCurrentTaskManager;
+const lastNoteSnapshotManager = self.MirrorChatLastNoteSnapshotManager;
+const offscreenManager = self.MirrorChatOffscreenManager;
 
 function sendDigestStatus(text, options = {}) {
   chrome.runtime.sendMessage?.({
@@ -46,26 +50,6 @@ function sendDigestStatus(text, options = {}) {
     text,
     errorText: options.errorText || "",
     tone: options.tone || "info"
-  });
-}
-
-async function readLastNoteSnapshot() {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(LAST_NOTE_SNAPSHOT_KEY, (data) => {
-      resolve(data?.[LAST_NOTE_SNAPSHOT_KEY] || null);
-    });
-  });
-}
-
-async function writeLastNoteSnapshot(snapshot) {
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.set({ [LAST_NOTE_SNAPSHOT_KEY]: snapshot }, () => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-        return;
-      }
-      resolve();
-    });
   });
 }
 
@@ -256,15 +240,15 @@ async function runTask(task) {
   // 保存成功時のみ質問フローを完了として CURRENT_TASK をクリアする（失敗時は再試行可能にするため残す）
   if (!saveFailed) {
     try {
-      await new Promise((resolve) => chrome.storage.local.remove(CURRENT_TASK_KEY, resolve));
+      await currentTaskManager.clearCurrentTask();
     } catch (e) {
-      console.warn("MirrorChat: CURRENT_TASK_KEY の削除に失敗しました:", e);
+      console.warn("MirrorChat: current task の削除に失敗しました:", e);
     }
   }
 
   if (saveResult.ok && saveResult.notePath) {
     try {
-      await writeLastNoteSnapshot({
+      await lastNoteSnapshotManager.writeLastNoteSnapshot({
         question: task.prompt,
         results,
         notePath: saveResult.notePath,
@@ -310,33 +294,11 @@ function processNext() {
   });
 }
 
-const OFFSCREEN_DOCUMENT_PATH = "offscreen.html";
-let offscreenCreating = null;
-
-async function ensureOffscreenDocument() {
-  const existingContexts = await chrome.runtime.getContexts({
-    contextTypes: ["OFFSCREEN_DOCUMENT"],
-    documentUrls: [chrome.runtime.getURL(OFFSCREEN_DOCUMENT_PATH)]
-  });
-  if (existingContexts.length > 0) return;
-
-  if (offscreenCreating) {
-    await offscreenCreating;
-    return;
-  }
-  offscreenCreating = chrome.offscreen.createDocument({
-    url: OFFSCREEN_DOCUMENT_PATH,
-    reasons: ["CLIPBOARD"],
-    justification: "AI応答テキストをクリップボードから取得するため"
-  });
-  await offscreenCreating;
-  offscreenCreating = null;
-}
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const handlers = {
     [MESSAGE_TYPES.READ_CLIPBOARD]: () => {
-      ensureOffscreenDocument()
+      offscreenManager.ensureOffscreenDocument()
         .then(() => {
           chrome.runtime.sendMessage(
             { type: MESSAGE_TYPES.READ_CLIPBOARD_INTERNAL },
@@ -403,12 +365,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           }
           // 現在の質問をローカルストレージに保持（ポップアップ再表示時などに利用）
           const isFollowUp = !!msg.isFollowUp;
-          await new Promise((resolve) =>
-            chrome.storage.local.set(
-              { [CURRENT_TASK_KEY]: { prompt, createdAt: Date.now(), isFollowUp, enabledAIs } },
-              resolve
-            )
-          );
+          await currentTaskManager.setCurrentTask({ prompt, createdAt: Date.now(), isFollowUp, enabledAIs });
 
           const sendPromises = enabledAIs.map((aiKey) => {
             if (!tabManager.getTabId(aiKey)) {
@@ -438,8 +395,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     [MESSAGE_TYPES.FETCH]: () => {
       // 回答取得フェーズ: 現在の質問に対してタブを順番にフォーカスし、回答を収集してObsidianに保存
-      chrome.storage.local.get(CURRENT_TASK_KEY, async (data) => {
-        const current = data?.[CURRENT_TASK_KEY];
+      currentTaskManager.getCurrentTask().then(async (current) => {
         if (!current || !current.prompt) {
           sendResponse({ ok: false, error: "取得対象の質問が見つかりませんでした" });
           return;
@@ -453,6 +409,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         });
         if (!taskQueue.isProcessing()) processNext();
         sendResponse({ ok: true });
+      }).catch((error) => {
+        console.error("MirrorChat fetch error:", error);
+        sendResponse({ ok: false, error: error?.message || String(error) });
       });
       return true;
     },
@@ -473,7 +432,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     [MESSAGE_TYPES.RESAVE_LAST]: () => {
       (async () => {
-        const snapshot = await readLastNoteSnapshot();
+        const snapshot = await lastNoteSnapshotManager.readLastNoteSnapshot();
         if (!snapshot?.notePath || !snapshot?.question || !Array.isArray(snapshot?.results)) {
           sendResponse({ ok: false, error: "再保存できる直近ノートがありません。まず通常の保存を一度実行してください。" });
           return;
@@ -518,7 +477,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     [MESSAGE_TYPES.REGENERATE_DIGEST]: () => {
       (async () => {
-        const snapshot = await readLastNoteSnapshot();
+        const snapshot = await lastNoteSnapshotManager.readLastNoteSnapshot();
         if (!snapshot?.notePath || !snapshot?.question || !Array.isArray(snapshot?.results)) {
           sendResponse({ ok: false, error: "digest を再生成できる直近ノートがありません。まず通常の保存を一度実行してください。" });
           return;
