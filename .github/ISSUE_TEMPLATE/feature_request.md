@@ -1,23 +1,23 @@
 ---
-name: 機能要望
-about: 新機能の提案
+name: Feature request
+about: Suggest an improvement or new feature
 title: ''
 labels: enhancement
 assignees: ''
 ---
 
-## 概要
+## Summary
 
-<!-- どんな機能が欲しいか簡潔に -->
+<!-- Describe the feature briefly. 日本語でも構いません。 -->
 
-## 背景・課題
+## Problem or motivation
 
-<!-- なぜこの機能が必要か -->
+<!-- Why is this needed? -->
 
-## 提案する解決策
+## Proposed solution
 
-<!-- 具体的にどう実装するとよいか（あれば） -->
+<!-- Describe your preferred solution if you have one -->
 
-## 代替案
+## Alternatives considered
 
-<!-- 他に考えた案があれば -->
+<!-- Share other options you considered -->

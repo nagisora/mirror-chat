@@ -1,34 +1,40 @@
-# コントリビューションガイドライン
+# Contributing
 
-MirrorChat へのコントリビューションに興味を持っていただきありがとうございます。
+[English](CONTRIBUTING.md) | [日本語](CONTRIBUTING_ja.md)
 
-## 開発環境のセットアップ
+Thank you for your interest in contributing to MirrorChat.
 
-1. リポジトリをクローンする
-2. Chrome で `chrome://extensions/` → デベロッパーモード ON → `ai-prompt-broadcaster` フォルダを読み込む
-3. コード変更後は拡張機能ページのリロードボタンで反映
+## Development setup
 
-## コントリビューションの流れ
+1. Clone the repository.
+2. Open `chrome://extensions/` in Chrome, enable Developer mode, and load the `ai-prompt-broadcaster` folder.
+3. After each code change, reload the extension from the extensions page.
 
-1. Issue を確認するか、新規 Issue を作成する
-2. ブランチを作成する（`feature/xxx` または `fix/xxx`）
-3. 変更を加え、コミットする
-4. プルリクエストを作成する
+## Contribution flow
 
-## コーディング規約
+1. Check an existing issue or open a new one.
+2. Create a branch such as `feature/xxx` or `fix/xxx`.
+3. Make your changes and commit them.
+4. Open a pull request.
 
-- **言語**: Vanilla JavaScript (ES2020+)、ビルドシステムなし
-- **content-utils.js**: 同一タブに複数回インジェクトされるため、定数は `var` + 既存値チェックで宣言すること
-- コミットメッセージは日本語で記載してください
+## Coding rules
 
-## E2Eテスト
+- Language: Vanilla JavaScript (ES2020+) with no build step
+- `content-utils.js`: because it may be injected multiple times into the same tab, top-level constants must use `var` with an existing-value guard
+- Commit messages should be written in Japanese in this repository
+
+## Tests
 
 ```bash
 cd e2e && pnpm test
 ```
 
-ログイン済み Chrome プロファイルを使うと送信〜回答取得までフルにテスト可能です。
+You can run the full send-and-fetch flow with a logged-in Chrome profile.
 
-## 質問・相談
+## Translation workflow
 
-Issue でお気軽にご質問ください。
+See [docs/TRANSLATIONS.md](docs/TRANSLATIONS.md) for the EN/JA documentation policy.
+
+## Questions
+
+If you are unsure about a change, open an issue.

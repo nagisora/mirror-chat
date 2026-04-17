@@ -1,105 +1,111 @@
 # MirrorChat
 
-**1つのプロンプトを4つのAIサービスに順次送信し、ObsidianにMarkdownとして保存する** Chrome拡張機能です。
+[English](README.md) | [日本語](README_ja.md)
 
-ChatGPT、Claude、Gemini、Grok の4つのAIチャットに同じ質問を一括送信し、回答を Obsidian の Vault に自動保存します。AIの回答を比較・検証したい方、Obsidianでナレッジ管理したい方に最適です。
+MirrorChat is a Chrome extension that sends one prompt to four AI services in sequence and saves the results to Obsidian as Markdown.
+
+It opens ChatGPT, Claude, Gemini, and Grok, submits the same question to each service, and stores every response in your Obsidian vault. It is built for people who want to compare model outputs and keep their research archive in Obsidian.
 
 ![Chrome Extension Manifest V3](https://img.shields.io/badge/Chrome-Extension%20Manifest%20V3-4285F4?logo=googlechrome)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-## 機能
+## Features
 
-- **一括送信**: 1つの質問を ChatGPT / Claude / Gemini / Grok に順次送信
-- **Obsidian連携**: Local REST API 経由で回答を Markdown として保存
-- **質問内 digest**: 回答保存後に OpenRouter の free モデルで digest を非同期生成し、同じ質問ファイルへ反映
-- **free候補更新**: OpenRouter `/models` から free 候補を手動 refresh 可能
-- **2段階フロー**: 「サイトを開く」→「送信」で、ログイン後に確実に送信
-- **DOMセレクタ調整**: Options 画面で各AIのセレクタをカスタマイズ可能（UI変更対応）
+- Send one question to ChatGPT, Claude, Gemini, and Grok in sequence
+- Save responses to Obsidian through the Local REST API plugin
+- Generate an asynchronous digest with a free OpenRouter model after the raw answers are saved
+- Refresh OpenRouter free-model candidates from `/models`
+- Use a two-step flow: open sites first, then send prompts after login is ready
+- Adjust fragile DOM selectors from the Options page when provider UIs change
 
-## 前提条件
+## Requirements
 
-- **Chrome** ブラウザ
-- **Obsidian** + [Local REST API](https://github.com/coddingtonbear/obsidian-local-rest-api) プラグイン
-- 各AIサービス（ChatGPT, Claude, Gemini, Grok）への**ログイン済みアカウント**
+- Chrome
+- Obsidian with the [Local REST API](https://github.com/coddingtonbear/obsidian-local-rest-api) plugin
+- Logged-in accounts for ChatGPT, Claude, Gemini, and Grok
 
-## インストール
+## Installation
 
-1. リポジトリをクローンまたはダウンロードする
-2. Chrome で `chrome://extensions/` を開く
-3. 「デベロッパーモード」を有効にする
-4. 「パッケージ化されていない拡張機能を読み込む」をクリック
-5. `ai-prompt-broadcaster` フォルダを選択する
+1. Clone or download this repository.
+2. Open `chrome://extensions/` in Chrome.
+3. Enable Developer mode.
+4. Click Load unpacked.
+5. Select the `ai-prompt-broadcaster` folder.
 
-## 使い方
+## Usage
 
-### 1. Obsidian の準備
+### 1. Prepare Obsidian
 
-1. Obsidian に **Local REST API** プラグインをインストール・有効化
-2. プラグイン設定で API トークンとポート番号を確認（HTTP デフォルト: 27123、HTTPS: 27124）
+1. Install and enable the Local REST API plugin in Obsidian.
+2. Check the plugin settings for the API token and port number. The default ports are 27123 for HTTP and 27124 for HTTPS.
 
-### 2. 拡張の設定
+### 2. Configure the extension
 
-1. 拡張アイコン右クリック → 「オプション」
-2. **Obsidian Local REST API ベースURL**: `http://127.0.0.1:27123/`（ポートが異なる場合は変更）
-3. **API トークン**: Obsidian で設定したトークンを入力（空欄可）
-4. **保存ルートパス**: 例 `200-AI Research`
-5. 必要に応じて **OpenRouter（Digest生成用）** を有効化し、API キーを設定
-6. free モデル候補を最新化したい場合は **free候補を更新** を実行
+1. Right-click the extension icon and open Options.
+2. Set Obsidian Local REST API Base URL, for example `http://127.0.0.1:27123/`.
+3. Enter the API token from Obsidian if needed.
+4. Set the storage root path, for example `200-AI Research`.
+5. If you want digests, enable OpenRouter digest generation and add your API key.
+6. If you want the latest free-model list, run Refresh free candidates.
 
-### 3. 利用手順
+### 3. Send a prompt
 
-1. 拡張アイコンをクリック
-2. 「サイトを開く」で4つのAIサイトのタブを開く
-3. 各サービスにログイン（未ログインの場合）
-4. 質問を入力して「送信」をクリック
-5. 回答取得後、質問ファイルが Obsidian に保存される
-6. digest を有効化している場合は、保存完了後に同じ質問ファイルの「まとめ」セクションへ非同期反映される
+1. Click the extension icon.
+2. Open the AI sites.
+3. Log in to each service if needed.
+4. Enter a question and click Send.
+5. After the answers are collected, the extension saves a question file to Obsidian.
+6. If digest generation is enabled, the extension updates the summary section asynchronously after the raw answers are stored.
 
-### 保存先フォルダ構成
+### Output structure
 
+```text
+storage-root/
+└── YYYYMMDD-sequence-question-prefix/
+    ├── 01-question-prefix.md
+    ├── 02-question-prefix.md
+    └── 03-question-prefix.md
 ```
-保存ルートパス/
-└── YYYYMMDD-連番-質問の先頭20文字/
-    ├── 01-質問文抜粋.md     # 質問 + まとめ + 全AI回答
-    ├── 02-質問文抜粋.md     # 続きの質問 + まとめ + 全AI回答（続きがある場合）
-    └── 03-質問文抜粋.md     # 続きの質問 + まとめ + 全AI回答（続きがある場合）
-```
 
-## プロジェクト構成
+Each file contains the original question, a summary section, and all AI responses.
 
-```
+## Project structure
+
+```text
 mirror-chat/
-├── ai-prompt-broadcaster/   # Chrome拡張のソース（ここを読み込む）
+├── ai-prompt-broadcaster/
 │   ├── manifest.json
 │   ├── popup.js, popup.html
 │   ├── background.js
-│   ├── content-*.js        # 各AI用のContent Script
+│   ├── content-*.js
 │   └── ...
-├── e2e/                    # Playwright E2Eテスト
-├── docs/                   # ドキュメント
+├── e2e/
+├── docs/
 └── README.md
 ```
 
-## ドキュメント
+## Documentation
 
-- [利用手順（詳細）](docs/CHROME_EXTENSION_USAGE.md)
-- [開発環境ガイド](docs/DEVELOPMENT.md)
+- [Usage Guide](docs/CHROME_EXTENSION_USAGE.md)
+- [Development Guide](docs/DEVELOPMENT.md)
+- [Translation Workflow](docs/TRANSLATIONS.md)
 
-## 開発
+## Development
 
-- **ビルド不要**: ソースをそのまま Chrome に読み込んで使用
-- **E2Eテスト**: `cd e2e && pnpm test`
+- No build step. Load the source directly into Chrome.
+- Run lint from the repository root with `pnpm lint`.
+- Run end-to-end tests with `cd e2e && pnpm test`.
 
-## 既知の制限
+## Known limitations
 
-- 各AIサービスのUI（DOM構造）は頻繁に変更されます。動かなくなった場合は Options 画面でセレクタを調整してください
-- Obsidian が起動していない、または Local REST API が無効な場合は保存に失敗します。失敗したデータは「再送信」で後から再試行できます
-- OpenRouter の free モデルは可用性が不安定です。digest 生成に失敗しても raw 回答保存は継続されます
+- Provider DOM structures change frequently. If one provider stops working, update the selectors in Options.
+- Saving fails when Obsidian is not running or the Local REST API plugin is disabled. Failed items can be retried later.
+- OpenRouter free models are not always available. Digest generation may fail even when raw answer storage succeeds.
 
-## ライセンス
+## License
 
 [MIT License](LICENSE)
 
-## コントリビューション
+## Contributing
 
-[CONTRIBUTING.md](CONTRIBUTING.md) をご覧ください。
+See [CONTRIBUTING.md](CONTRIBUTING.md).

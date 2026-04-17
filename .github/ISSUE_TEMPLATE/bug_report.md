@@ -1,31 +1,31 @@
 ---
-name: バグ報告
-about: 不具合の報告
+name: Bug report
+about: Report a bug in MirrorChat
 title: ''
 labels: bug
 assignees: ''
 ---
 
-## 現象
+## Summary
 
-<!-- 何が起きているか簡潔に -->
+<!-- Describe the problem briefly. 日本語でも構いません。 -->
 
-## 再現手順
+## Steps to reproduce
 
 1.
 2.
 3.
 
-## 期待する動作
+## Expected behavior
 
-<!-- 本来どう動くべきか -->
+<!-- What should have happened? -->
 
-## 環境
+## Environment
 
-- Chrome バージョン:
-- Obsidian バージョン:
-- Local REST API プラグイン: 有効 / 無効
+- Chrome version:
+- Obsidian version:
+- Local REST API plugin: enabled / disabled
 
-## 補足
+## Additional context
 
-<!-- スクリーンショット、エラーメッセージなど -->
+<!-- Screenshots, error messages, logs, or other details -->

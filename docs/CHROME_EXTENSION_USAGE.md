@@ -1,53 +1,55 @@
-# MirrorChat Chrome拡張 利用手順
+# MirrorChat Chrome Extension Usage Guide
 
-## 1. インストール
+[English](CHROME_EXTENSION_USAGE.md) | [日本語](CHROME_EXTENSION_USAGE_ja.md)
 
-1. `ai-prompt-broadcaster` フォルダを任意の場所に配置する
-2. Chrome で `chrome://extensions/` を開く
-3. 右上の「デベロッパーモード」を ON にする
-4. 「パッケージ化されていない拡張機能を読み込む」をクリック
-5. `ai-prompt-broadcaster` フォルダを選択する
+## 1. Install the extension
 
-## 2. Obsidian の準備
+1. Place the `ai-prompt-broadcaster` folder anywhere on your machine.
+2. Open `chrome://extensions/` in Chrome.
+3. Turn on Developer mode.
+4. Click Load unpacked.
+5. Select the `ai-prompt-broadcaster` folder.
 
-1. Obsidian を起動し、Vault を開く
-2. 設定 → コミュニティプラグイン → 「制限されたモード」をオフにする
-3. 「閲覧」から「Local REST API」を検索してインストール
-4. プラグインを有効化し、設定画面で以下を確認する
-   - ポート番号（HTTPS デフォルト: 27124、HTTP の場合は 27123 など）
-   - API トークン（空欄の場合は生成する）
+## 2. Prepare Obsidian
 
-## 3. 拡張の設定
+1. Launch Obsidian and open your vault.
+2. Go to Settings, Community plugins, and disable Restricted mode if needed.
+3. Search for and install Local REST API.
+4. Enable the plugin and check the following in its settings:
+   - Port number, typically 27124 for HTTPS or 27123 for HTTP
+   - API token, if one is required for your setup
 
-1. 拡張アイコンを右クリック → 「オプション」
-2. **Obsidian Local REST API ベースURL**: `https://127.0.0.1:27124/`（ポートが異なる場合は変更）
-3. **API トークン**: Obsidian で設定したトークンを入力（空欄可）
-4. **保存ルートパス**: `200-AI Research`（Vault ルートからの相対フォルダ）
-5. digest を使う場合は **回答保存後に digest を非同期生成する** を ON にし、**OpenRouter API キー** を設定する
-6. 「保存」をクリック
-7. free モデル候補を最新化したい場合は、設定画面の **free候補を更新** を押す
+## 3. Configure the extension
 
-## 4. 利用手順
+1. Right-click the extension icon and open Options.
+2. Set Obsidian Local REST API Base URL, for example `https://127.0.0.1:27124/`.
+3. Enter the API token from Obsidian if needed.
+4. Set Storage Root Path, for example `200-AI Research`.
+5. If you want digests, enable asynchronous digest generation after saving answers and set your OpenRouter API key.
+6. Click Save.
+7. If you want the latest free-model candidates, click Refresh free candidates.
 
-1. ChatGPT / Claude / Gemini / Grok のいずれかにブラウザでログインしておく（推奨）
-2. 拡張アイコンをクリック
-3. 質問を入力して「送信」をクリック
-4. 4 つの AI サイトが順次開き、自動でプロンプトが送信される
-5. 回答取得後、Obsidian の Vault 内の `保存ルートパス/YYYYMMDD-連番-質問の先頭20文字/` 以下に `01-質問文抜粋.md` が作成される
-6. 各質問ファイルには `## 質問`、`## まとめ`、各AI回答セクションが含まれる。digest 有効時は最初に `生成中...` が入り、その後 OpenRouter の free モデルで生成した digest に置き換わる
-7. digest 生成に失敗しても raw 回答はそのまま残り、`## まとめ` に失敗状態が反映される
+## 4. Use the extension
 
-## 5. トラブルシューティング
+1. Log in to ChatGPT, Claude, Gemini, or Grok in your browser ahead of time if possible.
+2. Click the extension icon.
+3. Enter your question and click Send.
+4. The extension opens the AI sites in sequence and submits the prompt automatically.
+5. After the answers are collected, a file such as `01-question-prefix.md` is created under `storage-root/YYYYMMDD-sequence-question-prefix/` in your Obsidian vault.
+6. Each question file contains `## Question`, `## Summary`, and the response sections for every AI. When digest is enabled, the summary initially shows a pending placeholder and is replaced later with an OpenRouter-generated digest.
+7. If digest generation fails, the raw answers remain saved and the summary section reflects the failure state.
 
-### 保存に失敗する
+## 5. Troubleshooting
 
-- Obsidian が起動しているか確認する
-- Local REST API プラグインが有効か確認する
-- ベース URL とトークンが正しいか確認する
-- 失敗したデータは「再送信」ボタンで再試行できる
+### Saving fails
 
-### 特定の AI で回答が取得できない
+- Make sure Obsidian is running.
+- Make sure the Local REST API plugin is enabled.
+- Verify that the base URL and API token are correct.
+- Failed items can be retried from the extension.
 
-- その AI のサイトにログインしているか確認する
-- Options 画面で DOM セレクタを調整する（サイトの UI 変更の可能性）
-- ブラウザの開発者ツールで要素を検証し、適切なセレクタを入力する
+### One AI service fails to fetch a response
+
+- Confirm that you are logged in to that service.
+- Adjust the DOM selectors in the Options page if the provider UI changed.
+- Inspect the page in browser developer tools and update the selectors accordingly.
