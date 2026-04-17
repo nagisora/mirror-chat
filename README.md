@@ -8,6 +8,7 @@ It opens ChatGPT, Claude, Gemini, and Grok, submits the same question to each se
 
 ![Chrome Extension Manifest V3](https://img.shields.io/badge/Chrome-Extension%20Manifest%20V3-4285F4?logo=googlechrome)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+[![Sponsor](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/nagisora)
 
 ## Features
 
@@ -109,3 +110,7 @@ mirror-chat/
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Sponsor
+
+If MirrorChat is useful to you, consider supporting development on [GitHub Sponsors](https://github.com/sponsors/nagisora).
