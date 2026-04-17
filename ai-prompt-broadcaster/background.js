@@ -53,13 +53,14 @@ function sendDigestStatus(text, options = {}) {
   });
 }
 
-async function runDigestFollowUp({ question, results, settings, notePath }) {
+async function runDigestFollowUp({ question, results, settings, notePath, isFollowUp }) {
   sendDigestStatus("digest を生成しています...", { tone: "info" });
 
   const digestResult = await digestService.generateDigest({
     question,
     results,
     settings,
+    isFollowUp,
     fetchImpl: fetch,
     onProgress: async (progress) => {
       if (!progress) return;
@@ -270,7 +271,8 @@ async function runTask(task) {
       question: task.prompt,
       results,
       settings,
-      notePath: saveResult.notePath
+      notePath: saveResult.notePath,
+      isFollowUp: !!task.isFollowUp
     }).catch((error) => {
       sendDigestStatus("digest の生成に失敗しました。");
       console.error("MirrorChat digest follow-up error:", error);
@@ -457,7 +459,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             question: snapshot.question,
             results: snapshot.results,
             settings,
-            notePath: snapshot.notePath
+            notePath: snapshot.notePath,
+            isFollowUp: !!snapshot.isFollowUp
           }).catch((error) => {
             sendDigestStatus("digest の再生成に失敗しました。", {
               tone: "error",
@@ -497,7 +500,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           question: snapshot.question,
           results: snapshot.results,
           settings: digestSettings,
-          notePath: snapshot.notePath
+          notePath: snapshot.notePath,
+          isFollowUp: !!snapshot.isFollowUp
         }).catch((error) => {
           sendDigestStatus("digest の再生成に失敗しました。", {
             tone: "error",
