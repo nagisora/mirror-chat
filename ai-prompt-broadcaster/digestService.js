@@ -1,14 +1,23 @@
 (function () {
   const openRouterClient = self.MirrorChatOpenRouterClient;
   const freeModelSelector = self.MirrorChatOpenRouterFreeModels;
-  const DIGEST_MODEL_TIMEOUT_MS = 15000;
+  const DIGEST_MODEL_TIMEOUT_MS = 30000;
   const DIGEST_CATALOG_TIMEOUT_MS = 8000;
+  const DIGEST_RECENT_FAILURE_COOLDOWN_MS = {
+    rateLimit: 10 * 60 * 1000,
+    timeout: 5 * 60 * 1000,
+    noProviders: 30 * 60 * 1000,
+    invalidFormat: 12 * 60 * 60 * 1000,
+    other: 2 * 60 * 1000
+  };
+  const DIGEST_RECENT_FAILURE_RETENTION_MS = Math.max(...Object.values(DIGEST_RECENT_FAILURE_COOLDOWN_MS));
+  const DIGEST_RECENT_FAILURE_LIMIT = 24;
   const MAX_DIGEST_QUESTION_CHARS = 1200;
   const MAX_DIGEST_ANSWER_CHARS = 3500;
 
-  function summarizeAttemptError({ modelId, kind, message }) {
+  function summarizeAttemptError({ modelId, kind, message, timeoutMs = DIGEST_MODEL_TIMEOUT_MS }) {
     if (kind === "timeout") {
-      return `${modelId} が ${Math.round(DIGEST_MODEL_TIMEOUT_MS / 1000)} 秒以内に応答しませんでした。freeモデル上限や provider 混雑の可能性があるため、別モデルへ切り替えます。`;
+      return `${modelId} が ${Math.round(timeoutMs / 1000)} 秒以内に応答しませんでした。freeモデル上限や provider 混雑の可能性があるため、別モデルへ切り替えます。`;
     }
     if (kind === "rateLimit") return `${modelId} はレート制限のため利用できません。別モデルへ切り替えます。`;
     if (kind === "noProviders") return `${modelId} は利用可能な provider がありません。別モデルへ切り替えます。`;
@@ -173,6 +182,123 @@
     return error instanceof Error ? error.message : String(error || "Unknown error");
   }
 
+  function getDigestFailureCooldownMs(kind) {
+    return DIGEST_RECENT_FAILURE_COOLDOWN_MS[String(kind || "")] || 0;
+  }
+
+  function normalizeRecentDigestFailures(rawFailures, now = Date.now()) {
+    if (!rawFailures || typeof rawFailures !== "object" || Array.isArray(rawFailures)) {
+      return {};
+    }
+
+    const normalizedEntries = Object.entries(rawFailures)
+      .map(([modelId, failure]) => {
+        const normalizedModelId = String(modelId || "").trim();
+        const kind = String(failure?.kind || "").trim();
+        const at = Number(failure?.at);
+        if (!normalizedModelId || !kind || !Number.isFinite(at) || at <= 0) {
+          return null;
+        }
+        const cooldownMs = getDigestFailureCooldownMs(kind);
+        if (cooldownMs <= 0) {
+          return null;
+        }
+        const age = now - at;
+        if (age < 0 || age > DIGEST_RECENT_FAILURE_RETENTION_MS) {
+          return null;
+        }
+        return [normalizedModelId, { kind, at }];
+      })
+      .filter(Boolean)
+      .sort((a, b) => b[1].at - a[1].at)
+      .slice(0, DIGEST_RECENT_FAILURE_LIMIT);
+
+    return Object.fromEntries(normalizedEntries);
+  }
+
+  function getActiveCooldownState(failure, now = Date.now()) {
+    const kind = String(failure?.kind || "").trim();
+    const at = Number(failure?.at);
+    const cooldownMs = getDigestFailureCooldownMs(kind);
+    if (cooldownMs <= 0 || !Number.isFinite(at) || at <= 0) {
+      return null;
+    }
+    const elapsedMs = now - at;
+    if (elapsedMs < 0 || elapsedMs >= cooldownMs) {
+      return null;
+    }
+    return {
+      kind,
+      at,
+      remainingMs: cooldownMs - elapsedMs
+    };
+  }
+
+  function reorderCandidatesByRecentFailures(candidates, recentFailures, now = Date.now()) {
+    const normalizedCandidates = Array.isArray(candidates) ? candidates.slice() : [];
+    return normalizedCandidates
+      .map((modelId, index) => ({
+        modelId,
+        index,
+        cooldown: getActiveCooldownState(recentFailures?.[modelId], now)
+      }))
+      .sort((a, b) => {
+        const aCoolingDown = a.cooldown ? 1 : 0;
+        const bCoolingDown = b.cooldown ? 1 : 0;
+        if (aCoolingDown !== bCoolingDown) {
+          return aCoolingDown - bCoolingDown;
+        }
+        if (a.cooldown && b.cooldown && a.cooldown.remainingMs !== b.cooldown.remainingMs) {
+          return a.cooldown.remainingMs - b.cooldown.remainingMs;
+        }
+        return a.index - b.index;
+      })
+      .map((entry) => entry.modelId);
+  }
+
+  function collectCoolingDownCandidates(candidates, recentFailures, now = Date.now()) {
+    return (Array.isArray(candidates) ? candidates : [])
+      .map((modelId) => {
+        const cooldown = getActiveCooldownState(recentFailures?.[modelId], now);
+        if (!cooldown) return null;
+        return {
+          modelId,
+          kind: cooldown.kind,
+          remainingMs: cooldown.remainingMs
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function updateRecentDigestFailures({ recentFailures, attempts, successModelId, now = Date.now() }) {
+    const nextFailures = normalizeRecentDigestFailures(recentFailures, now);
+
+    (Array.isArray(attempts) ? attempts : []).forEach((attempt, index) => {
+      const modelId = String(attempt?.modelId || "").trim();
+      const kind = String(attempt?.kind || "").trim();
+      if (!modelId) return;
+      if (getDigestFailureCooldownMs(kind) <= 0) {
+        delete nextFailures[modelId];
+        return;
+      }
+      nextFailures[modelId] = {
+        kind,
+        at: now + index
+      };
+    });
+
+    const normalizedSuccessModelId = String(successModelId || "").trim();
+    if (normalizedSuccessModelId) {
+      delete nextFailures[normalizedSuccessModelId];
+    }
+
+    return Object.fromEntries(
+      Object.entries(nextFailures)
+        .sort((a, b) => b[1].at - a[1].at)
+        .slice(0, DIGEST_RECENT_FAILURE_LIMIT)
+    );
+  }
+
   async function emitProgress(onProgress, payload) {
     if (typeof onProgress !== "function") return;
     await onProgress(payload);
@@ -182,10 +308,12 @@
     const resolvedApiKey = String(apiKey || settings?.openrouter?.apiKey || "").trim();
     const resolvedPreferredModel = String(preferredModel || settings?.openrouter?.preferredModel || "").trim();
     const resolvedRequestedModel = String(requestedModel || "").trim();
+    const resolvedRecentFailures = normalizeRecentDigestFailures(settings?.openrouter?.recentDigestFailures);
     return {
       resolvedApiKey,
       resolvedPreferredModel,
       resolvedRequestedModel,
+      resolvedRecentFailures,
       systemPrompt: String(prompt?.systemPrompt || ""),
       userPrompt: String(prompt?.userPrompt || ""),
       candidateResolution: {
@@ -193,6 +321,7 @@
         preferredModel: resolvedPreferredModel,
         requestedModel: resolvedRequestedModel,
         attemptedCandidates: [],
+        coolingDownCandidates: [],
         runtime: {
           timeoutMs,
           catalogTimeoutMs,
@@ -291,6 +420,7 @@
       resolvedApiKey,
       resolvedPreferredModel,
       resolvedRequestedModel,
+      resolvedRecentFailures,
       systemPrompt,
       userPrompt,
       candidateResolution
@@ -304,6 +434,7 @@
         attemptResults: [],
         refreshedCandidates: [],
         refreshedStats: {},
+        recentDigestFailures: resolvedRecentFailures,
         candidateResolution
       };
     }
@@ -329,8 +460,12 @@
           preferredModel: resolvedPreferredModel,
           candidates: resolvedCandidates
         });
-    const attemptCandidates = limitAttemptCandidates(orderedCandidates, attemptLimit);
+    const reorderedCandidates = resolvedRequestedModel
+      ? orderedCandidates
+      : reorderCandidatesByRecentFailures(orderedCandidates, resolvedRecentFailures);
+    const attemptCandidates = limitAttemptCandidates(reorderedCandidates, attemptLimit);
     candidateResolution.attemptedCandidates = attemptCandidates.slice();
+    candidateResolution.coolingDownCandidates = collectCoolingDownCandidates(orderedCandidates, resolvedRecentFailures);
 
     const attempts = [];
     const attemptResults = [];
@@ -346,7 +481,8 @@
           ? summarizeAttemptError({
               modelId: previousFailure.modelId,
               kind: previousFailure.kind,
-              message: previousFailure.error
+              message: previousFailure.error,
+              timeoutMs
             })
           : ""
       });
@@ -382,7 +518,7 @@
             kind: failure.kind,
             error: failure.error,
             message: `digest を生成しています... (${modelId})`,
-            errorMessage: summarizeAttemptError({ modelId, kind: failure.kind, message: failure.error })
+            errorMessage: summarizeAttemptError({ modelId, kind: failure.kind, message: failure.error, timeoutMs })
           });
           lastError = failure.error;
           continue;
@@ -403,6 +539,11 @@
           attemptResults,
           refreshedCandidates,
           refreshedStats,
+          recentDigestFailures: updateRecentDigestFailures({
+            recentFailures: resolvedRecentFailures,
+            attempts,
+            successModelId: modelId
+          }),
           candidateResolution
         };
       }
@@ -426,7 +567,7 @@
         kind: failure.kind,
         error: failure.error,
         message: `digest を生成しています... (${modelId})`,
-        errorMessage: summarizeAttemptError({ modelId, kind: failure.kind, message: failure.error })
+        errorMessage: summarizeAttemptError({ modelId, kind: failure.kind, message: failure.error, timeoutMs })
       });
       lastError = failure.error;
     }
@@ -438,6 +579,11 @@
       attemptResults,
       refreshedCandidates,
       refreshedStats,
+      recentDigestFailures: updateRecentDigestFailures({
+        recentFailures: resolvedRecentFailures,
+        attempts,
+        successModelId: ""
+      }),
       candidateResolution
     };
   }
@@ -455,7 +601,8 @@
       return {
         ok: false,
         error: selection.error,
-        attempts: selection.attempts
+        attempts: selection.attempts,
+        recentDigestFailures: selection.recentDigestFailures
       };
     }
 
@@ -468,7 +615,8 @@
       modelId: selection.modelId,
       attempts: selection.attempts,
       refreshedCandidates: selection.refreshedCandidates,
-      refreshedStats: selection.refreshedStats
+      refreshedStats: selection.refreshedStats,
+      recentDigestFailures: selection.recentDigestFailures
     };
   }
 

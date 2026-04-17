@@ -97,17 +97,23 @@ async function runDigestFollowUp({ question, results, settings, notePath, isFoll
     }
   });
 
+  const openRouterSettingsPatch = {};
   if (Array.isArray(digestResult.refreshedCandidates) && digestResult.refreshedCandidates.length > 0) {
+    openRouterSettingsPatch.freeModelCandidatesOverride = digestResult.refreshedCandidates;
+    openRouterSettingsPatch.lastRefreshStats = digestResult.refreshedStats || {};
+    openRouterSettingsPatch.lastRefreshAt = new Date().toISOString();
+  }
+  if (digestResult.recentDigestFailures && typeof digestResult.recentDigestFailures === "object") {
+    openRouterSettingsPatch.recentDigestFailures = digestResult.recentDigestFailures;
+  }
+
+  if (Object.keys(openRouterSettingsPatch).length > 0) {
     try {
       await self.MirrorChatStorage.saveSettings({
-        openrouter: {
-          freeModelCandidatesOverride: digestResult.refreshedCandidates,
-          lastRefreshStats: digestResult.refreshedStats || {},
-          lastRefreshAt: new Date().toISOString()
-        }
+        openrouter: openRouterSettingsPatch
       });
     } catch (error) {
-      console.warn("MirrorChat: free候補の保存に失敗しました:", error);
+      console.warn("MirrorChat: digest 用 OpenRouter 設定の保存に失敗しました:", error);
     }
   }
 
