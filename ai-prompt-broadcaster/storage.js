@@ -58,6 +58,7 @@
       apiKey: "",
       preferredModel: "",
       freeModelCandidatesOverride: [],
+      recentDigestFailures: {},
       lastRefreshStats: {},
       lastRefreshAt: ""
     },

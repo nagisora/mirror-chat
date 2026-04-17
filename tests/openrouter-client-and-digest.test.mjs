@@ -347,7 +347,7 @@ test("generateDigest reports timeout fallback progress", async () => {
   assert.equal(progressEvents[2].kind, "timeout");
   assert.match(progressEvents[2].errorMessage, /freeモデル上限|provider 混雑/);
   assert.match(progressEvents[3].errorMessage, /timeout\/model:free/);
-  assert.match(progressEvents[3].errorMessage, /15 秒以内/);
+  assert.match(progressEvents[3].errorMessage, /30 秒以内/);
 });
 
 test("generateDigest reports catalog timeout fallback progress", async () => {
@@ -502,6 +502,124 @@ test("runDigestPrompt can target a requested model without refreshing catalog", 
   assert.equal(modelCatalogFetches, 0);
   assert.equal(result.attemptResults.length, 1);
   assert.equal(result.attemptResults[0].ok, true);
+});
+
+test("runDigestPrompt deprioritizes recently rate-limited models", async () => {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const requestedModels = [];
+  const fetchImpl = async (url, options) => {
+    if (String(url).endsWith("/models")) {
+      return new Response(JSON.stringify({ data: [
+        { id: "a/model:free", name: "Model A 70B", created: nowSec },
+        { id: "b/model:free", name: "Model B 70B", created: nowSec }
+      ] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    }
+    const body = JSON.parse(options.body);
+    requestedModels.push(body.model);
+    return new Response(
+      JSON.stringify({
+        choices: [{ message: { content: "- 要点1\n- 要点2\n- 要点3\n\n### 補足\n- 補足情報\n\n### 気になる点\n- 追加確認" } }]
+      }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  };
+  const context = await loadScripts(
+    [
+      "./ai-prompt-broadcaster/openRouterFreeModels.js",
+      "./ai-prompt-broadcaster/openRouterClient.js",
+      "./ai-prompt-broadcaster/digestService.js"
+    ],
+    { fetch: fetchImpl }
+  );
+  const digestService = context.self.MirrorChatDigestService;
+
+  const result = await digestService.runDigestPrompt({
+    prompt: digestService.buildDigestDiagnosticPrompt(),
+    settings: {
+      openrouter: {
+        apiKey: "test",
+        preferredModel: "a/model:free",
+        freeModelCandidatesOverride: ["a/model:free", "b/model:free"],
+        recentDigestFailures: {
+          "a/model:free": {
+            kind: "rateLimit",
+            at: Date.now()
+          }
+        }
+      }
+    },
+    fetchImpl,
+    attemptLimit: 4
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.modelId, "b/model:free");
+  assert.deepEqual(Array.from(result.candidateResolution.attemptedCandidates), ["b/model:free", "a/model:free"]);
+  assert.equal(requestedModels[0], "b/model:free");
+  assert.equal(result.candidateResolution.coolingDownCandidates.length, 1);
+  assert.equal(result.candidateResolution.coolingDownCandidates[0].modelId, "a/model:free");
+  assert.deepEqual(Object.keys(result.recentDigestFailures), ["a/model:free"]);
+});
+
+test("generateDigest returns updated recent failure cooldowns after fallback", async () => {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const fetchImpl = async (url, options) => {
+    if (String(url).endsWith("/models")) {
+      return new Response(JSON.stringify({ data: [
+        { id: "a/model:free", name: "Model A 70B", created: nowSec },
+        { id: "b/model:free", name: "Model B 70B", created: nowSec }
+      ] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    }
+    const body = JSON.parse(options.body);
+    if (body.model === "a/model:free") {
+      return new Response("rate limited", { status: 429, headers: { "content-type": "text/plain" } });
+    }
+    return new Response(
+      JSON.stringify({
+        choices: [{ message: { content: "- 要点\n- 要点2\n- 要点3\n\n### 補足\n- 補足\n\n### 気になる点\n- 確認" } }]
+      }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  };
+  const context = await loadScripts(
+    [
+      "./ai-prompt-broadcaster/openRouterFreeModels.js",
+      "./ai-prompt-broadcaster/openRouterClient.js",
+      "./ai-prompt-broadcaster/digestService.js"
+    ],
+    { fetch: fetchImpl }
+  );
+  const digestService = context.self.MirrorChatDigestService;
+
+  const result = await digestService.generateDigest({
+    question: "質問",
+    results: [{ name: "ChatGPT", markdown: "回答", error: "" }],
+    settings: {
+      openrouter: {
+        apiKey: "test",
+        preferredModel: "a/model:free",
+        freeModelCandidatesOverride: ["a/model:free", "b/model:free"],
+        recentDigestFailures: {
+          "b/model:free": {
+            kind: "rateLimit",
+            at: Date.now()
+          }
+        }
+      }
+    },
+    fetchImpl
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.modelId, "b/model:free");
+  assert.equal(result.recentDigestFailures["a/model:free"].kind, "rateLimit");
+  assert.equal(result.recentDigestFailures["b/model:free"], undefined);
 });
 
 test("buildDigestPrompt compacts long source text", async () => {
