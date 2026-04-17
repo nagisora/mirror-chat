@@ -6,6 +6,8 @@ MirrorChat is a Chrome extension that sends one prompt to four AI services in se
 
 It opens ChatGPT, Claude, Gemini, and Grok, submits the same question to each service, and stores every response in your Obsidian vault. It is built for people who want to compare model outputs and keep their research archive in Obsidian.
 
+<img src="docs/images/mirrorchat-popup-en.png" alt="MirrorChat popup screenshot" width="454">
+
 ![Chrome Extension Manifest V3](https://img.shields.io/badge/Chrome-Extension%20Manifest%20V3-4285F4?logo=googlechrome)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 [![Sponsor](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/nagisora)

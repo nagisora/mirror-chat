@@ -6,6 +6,8 @@
 
 ChatGPT、Claude、Gemini、Grok の4つのAIチャットに同じ質問を一括送信し、回答を Obsidian の Vault に自動保存します。AI の回答を比較・検証したい方、Obsidian でナレッジ管理したい方に向いています。
 
+![MirrorChat ポップアップ画面](docs/images/mirrorchat-popup-ja.png)
+
 ![Chrome Extension Manifest V3](https://img.shields.io/badge/Chrome-Extension%20Manifest%20V3-4285F4?logo=googlechrome)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 [![Sponsor](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/nagisora)
