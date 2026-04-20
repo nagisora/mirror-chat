@@ -53,8 +53,17 @@
       token: "",
       rootPath: "200-AI Research"
     },
+    digestProvider: "",
     openrouter: {
       enableDigest: false,
+      apiKey: "",
+      preferredModel: "",
+      freeModelCandidatesOverride: [],
+      recentDigestFailures: {},
+      lastRefreshStats: {},
+      lastRefreshAt: ""
+    },
+    opencodezen: {
       apiKey: "",
       preferredModel: "",
       freeModelCandidatesOverride: [],
