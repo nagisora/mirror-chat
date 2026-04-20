@@ -4,8 +4,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   const baseUrlInput = document.getElementById("obsidian-base-url");
   const tokenInput = document.getElementById("obsidian-token");
   const rootPathInput = document.getElementById("obsidian-root-path");
-  const openRouterEnableDigestInput = document.getElementById("openrouter-enable-digest");
+  const digestProviderInput = document.getElementById("digest-provider");
   const openRouterApiKeyInput = document.getElementById("openrouter-api-key");
+  const openCodeZenApiKeyInput = document.getElementById("opencodezen-api-key");
   const openRouterPreferredModelInput = document.getElementById("openrouter-preferred-model");
   const openRouterRefreshButton = document.getElementById("openrouter-refresh-models-button");
   const openRouterRefreshStatus = document.getElementById("openrouter-refresh-status");
@@ -21,9 +22,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   const aiConfigList = document.getElementById("ai-config-list");
 
   const storage = window.MirrorChatStorage;
-  const openRouterClient = window.MirrorChatOpenRouterClient;
-  const openRouterFreeModels = window.MirrorChatOpenRouterFreeModels;
-  const digestService = window.MirrorChatDigestService;
+  const openRouterFreeModels = self.MirrorChatOpenRouterFreeModels;
+  const openCodeZenFreeModels = self.MirrorChatOpenCodeZenFreeModels;
+  const digestService = self.MirrorChatDigestService;
   const constants = window.MirrorChatConstants || {};
   const AI_DEFAULT_ORDER = constants.AI_DEFAULT_ORDER || ["gemini", "chatgpt", "claude", "grok"];
   const AI_CONFIG_DEFAULTS = constants.AI_CONFIG_DEFAULTS || {};
@@ -130,10 +131,65 @@ document.addEventListener("DOMContentLoaded", async () => {
       .join("\n");
   }
 
+  function buildDigestSettingsFromInputs(settings) {
+    const providerValue = digestProviderInput.value.trim().toLowerCase();
+    const nextSettings = {
+      ...settings,
+      digestProvider: providerValue || settings?.digestProvider || "",
+      openrouter: {
+        ...(settings?.openrouter || {}),
+        apiKey: openRouterApiKeyInput.value.trim() || settings?.openrouter?.apiKey || "",
+        preferredModel: providerValue === "openrouter"
+          ? (openRouterPreferredModelInput.value.trim() || "")
+          : (settings?.openrouter?.preferredModel || "")
+      },
+      opencodezen: {
+        ...(settings?.opencodezen || {}),
+        apiKey: openCodeZenApiKeyInput.value.trim() || settings?.opencodezen?.apiKey || "",
+        preferredModel: providerValue === "opencodezen"
+          ? (openRouterPreferredModelInput.value.trim() || "")
+          : (settings?.opencodezen?.preferredModel || "")
+      }
+    };
+    if (!nextSettings.digestProvider && settings?.openrouter?.enableDigest) {
+      nextSettings.digestProvider = "openrouter";
+    }
+    return nextSettings;
+  }
+
+  function getProviderDisplayName(providerName) {
+    return providerName === "opencodezen" ? "OpenCode Zen" : "OpenRouter";
+  }
+
+  function refreshDigestProviderUi(settings, options = {}) {
+    const nextSettings = buildDigestSettingsFromInputs(settings);
+    const provider = digestService.resolveProvider(nextSettings);
+    const providerSettings = provider.name === "opencodezen"
+      ? nextSettings.opencodezen
+      : nextSettings.openrouter;
+
+    populatePreferredModelOptions(nextSettings);
+    populateTestModelSuggestions(nextSettings);
+    openRouterRefreshMeta.textContent = formatRefreshMeta(
+      providerSettings,
+      getProviderDisplayName(provider.name)
+    );
+
+    if (options.resetStatus !== false) {
+      openRouterRefreshStatus.textContent = "";
+      setOpenRouterTestStatus("", "info");
+      openRouterTestLog.textContent = "";
+    }
+  }
+
   function populateTestModelSuggestions(settings) {
-    const candidates = openRouterFreeModels.buildKnownFreeModelList({
-      preferredModel: settings?.openrouter?.preferredModel,
-      candidates: settings?.openrouter?.freeModelCandidatesOverride
+    const provider = digestService.resolveProvider(settings);
+    const freeModelSelector = provider.name === "opencodezen"
+      ? openCodeZenFreeModels
+      : openRouterFreeModels;
+    const candidates = freeModelSelector.buildKnownFreeModelList({
+      preferredModel: provider.preferredModel,
+      candidates: provider.freeModelCandidatesOverride
     });
     const currentValue = openRouterTestModelInput.value;
     openRouterTestModelInput.innerHTML = "";
@@ -155,16 +211,15 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   async function runOpenRouterDiagnostic() {
-    const settings = await storage.getSettings();
-    const apiKey = openRouterApiKeyInput.value.trim() || settings.openrouter?.apiKey || "";
-    if (!apiKey) {
-      setOpenRouterTestStatus("OpenRouter API キーを入力してください。", "error");
+    const storedSettings = await storage.getSettings();
+    const settings = buildDigestSettingsFromInputs(storedSettings);
+    const provider = digestService.resolveProvider(settings);
+    if (!provider.apiKey) {
+      setOpenRouterTestStatus(`${provider.name} の API キーを入力してください。`, "error");
       openRouterTestLog.textContent = "API キーが未設定のため診断を開始できません。";
       return;
     }
 
-    const preferredModel = openRouterPreferredModelInput.value.trim();
-    const requestedTestModel = openRouterTestModelInput.value.trim();
     const prompt = digestService?.buildDigestDiagnosticPrompt
       ? digestService.buildDigestDiagnosticPrompt()
       : {
@@ -179,20 +234,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     };
 
     setOpenRouterTestButtonsDisabled(true);
-    setOpenRouterTestStatus("digest API をテスト中...", "info");
+    setOpenRouterTestStatus(`${provider.name} digest API をテスト中...`, "info");
     openRouterTestLog.textContent = "";
 
     try {
       appendLog(`[開始] ${new Date().toLocaleString("ja-JP")}`);
       appendLog(
-        `[設定] preferredModel=${preferredModel || "(自動選択)"} / testModel=${requestedTestModel || "(自動候補順)"}`
+        `[設定] provider=${provider.name} / preferredModel=${provider.preferredModel || "(自動選択)"} / ` +
+        `testModel=${openRouterTestModelInput.value.trim() || "(自動候補順)"}`
       );
       const diagnosticRun = await digestService.runDigestPrompt({
         prompt,
         settings,
-        apiKey,
-        preferredModel,
-        requestedModel: requestedTestModel,
+        requestedModel: openRouterTestModelInput.value.trim(),
         fetchImpl: fetch,
         attemptLimit: OPENROUTER_TEST_ATTEMPT_LIMIT
       });
@@ -201,24 +255,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         `[リクエスト] timeout=${runtime.timeoutMs || 0}ms / systemPrompt=${prompt.systemPrompt.length} chars / userPrompt=${prompt.userPrompt.length} chars`
       );
 
-      if (diagnosticRun.candidateResolution?.source === "requested") {
-        appendLog("");
-        appendLog(`[候補指定] 手動指定モデルをテストします: ${requestedTestModel}`);
+      if (diagnosticRun.candidateResolution?.source === "catalog") {
+        appendLog(
+          `[候補取得] 成功: catalog=${diagnosticRun.refreshedStats?.catalogCount ?? 0}件 / 診断候補=${diagnosticRun.candidateResolution?.attemptedCandidates?.length ?? 0}件`
+        );
       } else {
-        appendLog("");
-        appendLog("[候補取得] /models を確認しています...");
-        if (diagnosticRun.candidateResolution?.source === "catalog") {
-          appendLog(
-            `[候補取得] 成功: catalog=${diagnosticRun.refreshedStats?.catalogCount ?? 0}件 / 診断候補=${diagnosticRun.candidateResolution?.attemptedCandidates?.length ?? 0}件`
-          );
-        } else {
-          appendLog(
-            `[候補取得] 失敗: ${diagnosticRun.candidateResolution?.catalogError?.error || diagnosticRun.error || "不明なエラー"}`
-          );
-          appendLog(
-            `[候補取得] 保存済み/既定候補で続行: ${diagnosticRun.candidateResolution?.attemptedCandidates?.length ?? 0}件`
-          );
-        }
+        appendLog(
+          `[候補取得] 保存済み/既定候補で続行: ${diagnosticRun.candidateResolution?.attemptedCandidates?.length ?? 0}件`
+        );
       }
 
       const diagnosticCandidates = Array.isArray(diagnosticRun.candidateResolution?.attemptedCandidates)
@@ -305,9 +349,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function populatePreferredModelOptions(settings) {
-    const options = openRouterFreeModels.buildSelectOptions({
-      preferredModel: settings?.openrouter?.preferredModel,
-      candidates: settings?.openrouter?.freeModelCandidatesOverride
+    const provider = digestService.resolveProvider(settings);
+    const freeModelSelector = provider.name === "opencodezen"
+      ? openCodeZenFreeModels
+      : openRouterFreeModels;
+    const options = freeModelSelector.buildSelectOptions({
+      preferredModel: provider.preferredModel,
+      candidates: provider.freeModelCandidatesOverride
     });
     openRouterPreferredModelInput.innerHTML = "";
     options.forEach(({ value, label }) => {
@@ -316,18 +364,23 @@ document.addEventListener("DOMContentLoaded", async () => {
       option.textContent = label;
       openRouterPreferredModelInput.appendChild(option);
     });
-    openRouterPreferredModelInput.value = settings?.openrouter?.preferredModel || "";
+    openRouterPreferredModelInput.value = provider.preferredModel || "";
   }
 
-  function formatRefreshMeta(openRouterSettings) {
-    const summary = openRouterFreeModels.summarizeModelAvailability({
-      preferredModel: openRouterSettings?.preferredModel,
-      candidates: openRouterSettings?.freeModelCandidatesOverride,
-      stats: openRouterSettings?.lastRefreshStats,
-      lastRefreshAt: openRouterSettings?.lastRefreshAt
-    });
-    if (!summary.hasRefreshInfo) {
-      return `更新済み候補はまだありません。プルダウン表示: ${summary.selectableCount}件（既定候補）`;
+  function formatRefreshMeta(providerSettings, providerName) {
+    const candidates = providerSettings?.freeModelCandidatesOverride || [];
+    const stats = providerSettings?.lastRefreshStats || {};
+    const lastRefreshAt = providerSettings?.lastRefreshAt || "";
+    const summary = {
+      digestCandidateCount: candidates.length,
+      selectableCount: candidates.length,
+      freeCount: stats.freeCount ?? null,
+      catalogCount: stats.catalogCount ?? null,
+      digestCompatibleCount: stats.digestCompatibleCount ?? null,
+      lastRefreshAt
+    };
+    if (candidates.length === 0 && !summary.lastRefreshAt) {
+      return `更新済み候補はまだありません（${providerName} の既定候補）`;
     }
     const parts = [];
     if (summary.freeCount !== null) {
@@ -351,14 +404,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     baseUrlInput.value = settings.obsidian.baseUrl || "";
     tokenInput.value = settings.obsidian.token || "";
     rootPathInput.value = settings.obsidian.rootPath || "";
-    openRouterEnableDigestInput.checked = !!settings.openrouter?.enableDigest;
+    digestProviderInput.value = settings.digestProvider || "";
     openRouterApiKeyInput.value = settings.openrouter?.apiKey || "";
-    populatePreferredModelOptions(settings);
-    populateTestModelSuggestions(settings);
-    openRouterRefreshMeta.textContent = formatRefreshMeta(settings.openrouter);
-    openRouterRefreshStatus.textContent = "";
-    setOpenRouterTestStatus("", "info");
-    openRouterTestLog.textContent = "";
+    openCodeZenApiKeyInput.value = settings.opencodezen?.apiKey || "";
+    refreshDigestProviderUi(settings);
     openRouterTestModelInput.value = "";
     setOpenRouterTestButtonsDisabled(false);
 
@@ -384,6 +433,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   async function save() {
+    const providerValue = digestProviderInput.value.trim();
     const partial = {
       aiOrder: [...currentAiOrder],
       obsidian: {
@@ -391,10 +441,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         token: tokenInput.value.trim(),
         rootPath: rootPathInput.value.trim()
       },
+      digestProvider: providerValue || null,
       openrouter: {
-        enableDigest: !!openRouterEnableDigestInput.checked,
         apiKey: openRouterApiKeyInput.value.trim(),
-        preferredModel: openRouterPreferredModelInput.value.trim() || null
+        preferredModel: providerValue === "openrouter"
+          ? (openRouterPreferredModelInput.value.trim() || null)
+          : null
+      },
+      opencodezen: {
+        apiKey: openCodeZenApiKeyInput.value.trim(),
+        preferredModel: providerValue === "opencodezen"
+          ? (openRouterPreferredModelInput.value.trim() || null)
+          : null
       },
       aiConfigs: {}
     };
@@ -450,35 +508,41 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   openRouterRefreshButton.addEventListener("click", async () => {
-    const settings = await storage.getSettings();
-    const apiKey = openRouterApiKeyInput.value.trim() || settings.openrouter?.apiKey || "";
+    const storedSettings = await storage.getSettings();
+    const settings = buildDigestSettingsFromInputs(storedSettings);
+    const provider = digestService.resolveProvider(settings);
+    if (!provider.apiKey) {
+      openRouterRefreshStatus.textContent = `${provider.name} の API キーを入力してください。`;
+      return;
+    }
     openRouterRefreshButton.disabled = true;
-    openRouterRefreshStatus.textContent = "OpenRouter の free 候補を更新中...";
+    openRouterRefreshStatus.textContent = `${provider.name} の free 候補を更新中...`;
     try {
-      const catalog = await openRouterClient.fetchModelsCatalog({ apiKey, fetchImpl: fetch });
-      const refreshed = openRouterFreeModels.refreshDigestFreeModels({
+      const catalog = await provider.client.fetchModelsCatalog({ apiKey: provider.apiKey, fetchImpl: fetch });
+      const refreshed = provider.freeModelSelector.refreshDigestFreeModels({
         catalog,
         preferredModel: openRouterPreferredModelInput.value.trim()
       });
+      const providerKey = provider.name === "opencodezen" ? "opencodezen" : "openrouter";
       const nextSettings = await storage.saveSettings({
-        openrouter: {
+        [providerKey]: {
           freeModelCandidatesOverride: refreshed.candidates,
           lastRefreshStats: refreshed.stats,
           lastRefreshAt: new Date().toISOString()
         }
       });
-      const summary = openRouterFreeModels.summarizeModelAvailability({
-        preferredModel: nextSettings?.openrouter?.preferredModel,
-        candidates: nextSettings?.openrouter?.freeModelCandidatesOverride,
-        stats: nextSettings?.openrouter?.lastRefreshStats,
-        lastRefreshAt: nextSettings?.openrouter?.lastRefreshAt
-      });
+      const providerSettings = provider.name === "opencodezen"
+        ? nextSettings.opencodezen
+        : nextSettings.openrouter;
       openRouterRefreshStatus.textContent =
-        `free取得 ${summary.freeCount ?? 0}件 / digest候補 ${summary.digestCandidateCount}件 / ` +
-        `プルダウン表示 ${summary.selectableCount}件 を更新しました。`;
+        `free取得 ${refreshed.stats.freeCount ?? 0}件 / digest候補 ${refreshed.candidates.length}件 / ` +
+        `プルダウン表示 ${refreshed.candidates.length}件 を更新しました。`;
       populatePreferredModelOptions(nextSettings);
       populateTestModelSuggestions(nextSettings);
-      openRouterRefreshMeta.textContent = formatRefreshMeta(nextSettings.openrouter);
+      openRouterRefreshMeta.textContent = formatRefreshMeta(
+        providerSettings,
+        provider.name === "opencodezen" ? "OpenCode Zen" : "OpenRouter"
+      );
     } catch (error) {
       openRouterRefreshStatus.textContent = `候補更新に失敗しました: ${error instanceof Error ? error.message : String(error)}`;
     } finally {
@@ -501,6 +565,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         "error"
       );
     });
+  });
+
+  digestProviderInput.addEventListener("change", async () => {
+    const settings = await storage.getSettings();
+    refreshDigestProviderUi(settings);
   });
 
   aiOrderList?.addEventListener("click", (event) => {

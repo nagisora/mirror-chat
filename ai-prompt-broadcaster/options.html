@@ -26,38 +26,58 @@
       </section>
 
       <section>
-        <h2>OpenRouter（Digest生成用）</h2>
-        <label class="checkbox-row">
-          <input id="openrouter-enable-digest" type="checkbox" />
-          <span>回答保存後に digest を非同期生成する</span>
-        </label>
+        <h2>Digest 生成（要約）</h2>
         <label>
-          OpenRouter API キー
-          <input id="openrouter-api-key" type="password" placeholder="sk-or-..." />
+          プロバイダー
+          <select id="digest-provider">
+            <option value="">無効</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="opencodezen">OpenCode Zen</option>
+          </select>
         </label>
-        <details class="advanced-settings">
-          <summary>高度な設定</summary>
-          <label>
-            使用モデルを固定する（任意）
-            <select id="openrouter-preferred-model"></select>
-          </label>
-          <div class="actions">
-            <button id="openrouter-refresh-models-button" type="button">free候補を手動更新</button>
-            <span id="openrouter-refresh-status" aria-live="polite"></span>
+        <details id="digest-provider-settings" class="advanced-settings" open>
+          <summary>provider 設定</summary>
+
+          <div id="openrouter-settings">
+            <h3>OpenRouter</h3>
+            <label>
+              OpenRouter API キー
+              <input id="openrouter-api-key" type="password" placeholder="sk-or-..." />
+            </label>
           </div>
-          <p id="openrouter-refresh-meta"></p>
-          <p>digest 実行前には free 候補を自動更新します。ここでは候補一覧を先に確認・更新できます。</p>
-          <label>
-            APIテスト対象モデル（任意）
-            <select id="openrouter-test-model"></select>
-          </label>
-          <div class="actions diagnostic-actions">
-            <button id="openrouter-test-button" type="button">digest APIをテスト</button>
-            <button id="openrouter-test-copy-button" type="button">ログをコピー</button>
-            <span id="openrouter-test-status" aria-live="polite"></span>
+
+          <div id="opencodezen-settings">
+            <h3>OpenCode Zen</h3>
+            <label>
+              OpenCode Zen API キー
+              <input id="opencodezen-api-key" type="password" placeholder="sk-..." />
+            </label>
           </div>
-          <p>このテストは digest 本番と同じ候補解決・chat/completions 実行経路を使います。モデルIDを入れた場合はその1件だけ、空欄の場合は候補順に最大4モデルを試して詳細ログを表示します。</p>
-          <pre id="openrouter-test-log" class="log-output" aria-live="polite"></pre>
+
+          <details class="advanced-settings">
+            <summary>高度な設定</summary>
+            <label>
+              使用モデルを固定する（任意）
+              <select id="openrouter-preferred-model"></select>
+            </label>
+            <div class="actions">
+              <button id="openrouter-refresh-models-button" type="button">free候補を手動更新</button>
+              <span id="openrouter-refresh-status" aria-live="polite"></span>
+            </div>
+            <p id="openrouter-refresh-meta"></p>
+            <p>digest 実行前には free 候補を自動更新します。ここでは候補一覧を先に確認・更新できます。</p>
+            <label>
+              APIテスト対象モデル（任意）
+              <select id="openrouter-test-model"></select>
+            </label>
+            <div class="actions diagnostic-actions">
+              <button id="openrouter-test-button" type="button">digest APIをテスト</button>
+              <button id="openrouter-test-copy-button" type="button">ログをコピー</button>
+              <span id="openrouter-test-status" aria-live="polite"></span>
+            </div>
+            <p>このテストは digest 本番と同じ候補解決・chat/completions 実行経路を使います。モデルIDを入れた場合はその1件だけ、空欄の場合は候補順に最大4モデルを試して詳細ログを表示します。</p>
+            <pre id="openrouter-test-log" class="log-output" aria-live="polite"></pre>
+          </details>
         </details>
       </section>
 
@@ -241,6 +261,8 @@
     <script src="storage.js"></script>
     <script src="openRouterFreeModels.js"></script>
     <script src="openRouterClient.js"></script>
+    <script src="openCodeZenFreeModels.js"></script>
+    <script src="openCodeZenClient.js"></script>
     <script src="digestService.js"></script>
     <script src="options.js"></script>
   </body>

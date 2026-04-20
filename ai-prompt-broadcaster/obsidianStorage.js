@@ -64,7 +64,9 @@
   }
 
   function buildInitialDigestText(settings) {
-    return settings.openrouter?.enableDigest ? DIGEST_PENDING_TEXT : DIGEST_DISABLED_TEXT;
+    return settings?.digestProvider || settings?.openrouter?.enableDigest
+      ? DIGEST_PENDING_TEXT
+      : DIGEST_DISABLED_TEXT;
   }
 
   function buildQuestionAnswersContent(question, results, settings) {

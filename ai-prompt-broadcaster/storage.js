@@ -53,8 +53,17 @@
       token: "",
       rootPath: "200-AI Research"
     },
+    digestProvider: "",
     openrouter: {
       enableDigest: false,
+      apiKey: "",
+      preferredModel: "",
+      freeModelCandidatesOverride: [],
+      recentDigestFailures: {},
+      lastRefreshStats: {},
+      lastRefreshAt: ""
+    },
+    opencodezen: {
       apiKey: "",
       preferredModel: "",
       freeModelCandidatesOverride: [],
@@ -95,8 +104,11 @@
   }
 
   function sanitizeSettings(settings) {
+    const digestProvider = String(settings?.digestProvider || "").trim().toLowerCase();
+    const migratedDigestProvider = digestProvider || (settings?.openrouter?.enableDigest ? "openrouter" : "");
     return {
       ...settings,
+      digestProvider: migratedDigestProvider,
       aiOrder: normalizeAiOrder(settings?.aiOrder)
     };
   }
