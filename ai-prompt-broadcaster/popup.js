@@ -46,6 +46,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const currentTaskKey = constants.STORAGE_KEYS?.CURRENT_TASK ?? "mirrorchatCurrentTask";
   const failedItemsKey = constants.STORAGE_KEYS?.FAILED_ITEMS ?? "mirrorchatFailedItems";
   const lastNoteSnapshotKey = constants.STORAGE_KEYS?.LAST_NOTE_SNAPSHOT ?? "mirrorchatLastNoteSnapshot";
+  const settingsKey = constants.STORAGE_KEYS?.SETTINGS ?? "mirrorchatSettings";
 
   const MSG_GET_TAB_STATUS = MESSAGE_TYPES.GET_TAB_STATUS || "MIRRORCHAT_GET_TAB_STATUS";
   const MSG_OPEN_TABS = MESSAGE_TYPES.OPEN_TABS || "MIRRORCHAT_OPEN_TABS";
@@ -61,6 +62,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const MSG_DONE = MESSAGE_TYPES.DONE || "MIRRORCHAT_DONE";
   const storage = window.MirrorChatStorage;
   const openRouterFreeModels = window.MirrorChatOpenRouterFreeModels;
+  const openCodeZenFreeModels = window.MirrorChatOpenCodeZenFreeModels;
 
   const indicators = {};
   const aiCheckboxes = {};
@@ -113,17 +115,38 @@ document.addEventListener("DOMContentLoaded", async () => {
     busyAction: ""
   };
 
+  function resolveDigestProviderConfig(settings) {
+    const providerName = String(
+      settings?.digestProvider || (settings?.openrouter?.enableDigest ? "openrouter" : "")
+    ).trim().toLowerCase();
+    if (providerName === "opencodezen") {
+      return {
+        name: "opencodezen",
+        preferredModel: settings?.opencodezen?.preferredModel,
+        freeModelCandidatesOverride: settings?.opencodezen?.freeModelCandidatesOverride,
+        selector: openCodeZenFreeModels
+      };
+    }
+    return {
+      name: "openrouter",
+      preferredModel: settings?.openrouter?.preferredModel,
+      freeModelCandidatesOverride: settings?.openrouter?.freeModelCandidatesOverride,
+      selector: openRouterFreeModels
+    };
+  }
+
   function buildDigestModelOptions(settings) {
-    if (openRouterFreeModels?.buildSelectOptions) {
-      return openRouterFreeModels.buildSelectOptions({
-        preferredModel: settings?.openrouter?.preferredModel,
-        candidates: settings?.openrouter?.freeModelCandidatesOverride
+    const provider = resolveDigestProviderConfig(settings);
+    if (provider.selector?.buildSelectOptions) {
+      return provider.selector.buildSelectOptions({
+        preferredModel: provider.preferredModel,
+        candidates: provider.freeModelCandidatesOverride
       }).map((option, index) => (index === 0 ? { ...option, label: "自動選択" } : option));
     }
 
-    const preferredModel = String(settings?.openrouter?.preferredModel || "").trim();
-    const candidates = Array.isArray(settings?.openrouter?.freeModelCandidatesOverride)
-      ? settings.openrouter.freeModelCandidatesOverride
+    const preferredModel = String(provider.preferredModel || "").trim();
+    const candidates = Array.isArray(provider.freeModelCandidatesOverride)
+      ? provider.freeModelCandidatesOverride
       : [];
     const unique = new Set();
     const ordered = [];
@@ -502,6 +525,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       void syncLastSavedNoteState();
       refreshTabStatus();
     }
+  });
+
+  chrome.storage.onChanged?.addListener((changes, areaName) => {
+    if (areaName !== "sync") return;
+    if (!Object.prototype.hasOwnProperty.call(changes || {}, settingsKey)) return;
+    void syncLastSavedNoteState();
   });
 
   await syncRetryState();

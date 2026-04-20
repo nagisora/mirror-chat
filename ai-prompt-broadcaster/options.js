@@ -157,6 +157,31 @@ document.addEventListener("DOMContentLoaded", async () => {
     return nextSettings;
   }
 
+  function getProviderDisplayName(providerName) {
+    return providerName === "opencodezen" ? "OpenCode Zen" : "OpenRouter";
+  }
+
+  function refreshDigestProviderUi(settings, options = {}) {
+    const nextSettings = buildDigestSettingsFromInputs(settings);
+    const provider = digestService.resolveProvider(nextSettings);
+    const providerSettings = provider.name === "opencodezen"
+      ? nextSettings.opencodezen
+      : nextSettings.openrouter;
+
+    populatePreferredModelOptions(nextSettings);
+    populateTestModelSuggestions(nextSettings);
+    openRouterRefreshMeta.textContent = formatRefreshMeta(
+      providerSettings,
+      getProviderDisplayName(provider.name)
+    );
+
+    if (options.resetStatus !== false) {
+      openRouterRefreshStatus.textContent = "";
+      setOpenRouterTestStatus("", "info");
+      openRouterTestLog.textContent = "";
+    }
+  }
+
   function populateTestModelSuggestions(settings) {
     const provider = digestService.resolveProvider(settings);
     const freeModelSelector = provider.name === "opencodezen"
@@ -382,16 +407,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     digestProviderInput.value = settings.digestProvider || "";
     openRouterApiKeyInput.value = settings.openrouter?.apiKey || "";
     openCodeZenApiKeyInput.value = settings.opencodezen?.apiKey || "";
-    populatePreferredModelOptions(settings);
-    populateTestModelSuggestions(settings);
-    const provider = digestService.resolveProvider(settings);
-    openRouterRefreshMeta.textContent = formatRefreshMeta(
-      provider.name === "opencodezen" ? settings.opencodezen : settings.openrouter,
-      provider.name === "opencodezen" ? "OpenCode Zen" : "OpenRouter"
-    );
-    openRouterRefreshStatus.textContent = "";
-    setOpenRouterTestStatus("", "info");
-    openRouterTestLog.textContent = "";
+    refreshDigestProviderUi(settings);
     openRouterTestModelInput.value = "";
     setOpenRouterTestButtonsDisabled(false);
 
@@ -549,6 +565,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         "error"
       );
     });
+  });
+
+  digestProviderInput.addEventListener("change", async () => {
+    const settings = await storage.getSettings();
+    refreshDigestProviderUi(settings);
   });
 
   aiOrderList?.addEventListener("click", (event) => {
