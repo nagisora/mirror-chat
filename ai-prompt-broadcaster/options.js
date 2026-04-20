@@ -26,7 +26,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   const openCodeZenFreeModels = self.MirrorChatOpenCodeZenFreeModels;
   const digestService = self.MirrorChatDigestService;
   const constants = window.MirrorChatConstants || {};
-  // DOM 参照（provider非依存 един интерфейс）
   const AI_DEFAULT_ORDER = constants.AI_DEFAULT_ORDER || ["gemini", "chatgpt", "claude", "grok"];
   const AI_CONFIG_DEFAULTS = constants.AI_CONFIG_DEFAULTS || {};
   const aiOrderUtils = window.MirrorChatAIOrderUtils;
@@ -132,6 +131,32 @@ document.addEventListener("DOMContentLoaded", async () => {
       .join("\n");
   }
 
+  function buildDigestSettingsFromInputs(settings) {
+    const providerValue = digestProviderInput.value.trim().toLowerCase();
+    const nextSettings = {
+      ...settings,
+      digestProvider: providerValue || settings?.digestProvider || "",
+      openrouter: {
+        ...(settings?.openrouter || {}),
+        apiKey: openRouterApiKeyInput.value.trim() || settings?.openrouter?.apiKey || "",
+        preferredModel: providerValue === "openrouter"
+          ? (openRouterPreferredModelInput.value.trim() || "")
+          : (settings?.openrouter?.preferredModel || "")
+      },
+      opencodezen: {
+        ...(settings?.opencodezen || {}),
+        apiKey: openCodeZenApiKeyInput.value.trim() || settings?.opencodezen?.apiKey || "",
+        preferredModel: providerValue === "opencodezen"
+          ? (openRouterPreferredModelInput.value.trim() || "")
+          : (settings?.opencodezen?.preferredModel || "")
+      }
+    };
+    if (!nextSettings.digestProvider && settings?.openrouter?.enableDigest) {
+      nextSettings.digestProvider = "openrouter";
+    }
+    return nextSettings;
+  }
+
   function populateTestModelSuggestions(settings) {
     const provider = digestService.resolveProvider(settings);
     const freeModelSelector = provider.name === "opencodezen"
@@ -161,7 +186,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   async function runOpenRouterDiagnostic() {
-    const settings = await storage.getSettings();
+    const storedSettings = await storage.getSettings();
+    const settings = buildDigestSettingsFromInputs(storedSettings);
     const provider = digestService.resolveProvider(settings);
     if (!provider.apiKey) {
       setOpenRouterTestStatus(`${provider.name} の API キーを入力してください。`, "error");
@@ -195,6 +221,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const diagnosticRun = await digestService.runDigestPrompt({
         prompt,
         settings,
+        requestedModel: openRouterTestModelInput.value.trim(),
         fetchImpl: fetch,
         attemptLimit: OPENROUTER_TEST_ATTEMPT_LIMIT
       });
@@ -465,7 +492,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   openRouterRefreshButton.addEventListener("click", async () => {
-    const settings = await storage.getSettings();
+    const storedSettings = await storage.getSettings();
+    const settings = buildDigestSettingsFromInputs(storedSettings);
     const provider = digestService.resolveProvider(settings);
     if (!provider.apiKey) {
       openRouterRefreshStatus.textContent = `${provider.name} の API キーを入力してください。`;

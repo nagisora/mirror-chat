@@ -8,6 +8,8 @@ importScripts(
   "obsidianClient.js",
   "openRouterFreeModels.js",
   "openRouterClient.js",
+  "openCodeZenFreeModels.js",
+  "openCodeZenClient.js",
   "digestService.js",
   "taskQueue.js",
   "errorRetry.js",
@@ -109,11 +111,12 @@ async function runDigestFollowUp({ question, results, settings, notePath, isFoll
 
   if (Object.keys(openRouterSettingsPatch).length > 0) {
     try {
+      const providerKey = digestResult.providerName === "opencodezen" ? "opencodezen" : "openrouter";
       await self.MirrorChatStorage.saveSettings({
-        openrouter: openRouterSettingsPatch
+        [providerKey]: openRouterSettingsPatch
       });
     } catch (error) {
-      console.warn("MirrorChat: digest 用 OpenRouter 設定の保存に失敗しました:", error);
+      console.warn("MirrorChat: digest 用 provider 設定の保存に失敗しました:", error);
     }
   }
 

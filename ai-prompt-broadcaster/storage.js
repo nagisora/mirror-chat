@@ -104,8 +104,11 @@
   }
 
   function sanitizeSettings(settings) {
+    const digestProvider = String(settings?.digestProvider || "").trim().toLowerCase();
+    const migratedDigestProvider = digestProvider || (settings?.openrouter?.enableDigest ? "openrouter" : "");
     return {
       ...settings,
+      digestProvider: migratedDigestProvider,
       aiOrder: normalizeAiOrder(settings?.aiOrder)
     };
   }

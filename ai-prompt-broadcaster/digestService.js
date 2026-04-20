@@ -9,6 +9,7 @@
     rateLimit: 10 * 60 * 1000,
     timeout: 5 * 60 * 1000,
     noProviders: 30 * 60 * 1000,
+    invalidModel: 12 * 60 * 60 * 1000,
     invalidFormat: 12 * 60 * 60 * 1000,
     other: 2 * 60 * 1000
   };
@@ -39,7 +40,7 @@
   }
 
   function isDigestEnabled(settings) {
-    return !!settings?.digestProvider;
+    return !!settings?.digestProvider || !!settings?.openrouter?.enableDigest;
   }
 
   function buildDigestFailureText(message) {
