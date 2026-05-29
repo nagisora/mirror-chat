@@ -204,3 +204,41 @@ test("saveToObsidian writes pending digest placeholder for provider-based digest
   assert.equal(result.ok, true);
   assert.match(capturedContent, /## まとめ\n\n生成中\.\.\./);
 });
+
+test("rewriteNoteContentInObsidian preserves provided markdown content", async () => {
+  let capturedContent = "";
+  const context = await loadObsidianStorage({
+    self: {
+      MirrorChatConstants: {
+        STORAGE_KEYS: {
+          FOLDER_SEQ: "folder",
+          LAST_SAVED_FOLDER: "last",
+          QUESTION_FILE_SEQ: "question"
+        }
+      },
+      ObsidianClient: {
+        async createNote(_baseUrl, _token, _notePath, content) {
+          capturedContent = content;
+          return { ok: true };
+        }
+      }
+    }
+  });
+
+  const obsidianStorage = context.self.MirrorChatObsidianStorage;
+  const content = "## 質問\n\nQ\n\n---\n\n## まとめ\n\n既存のまとめ";
+  const result = await obsidianStorage.rewriteNoteContentInObsidian(
+    "path/to/note.md",
+    content,
+    {
+      obsidian: {
+        baseUrl: "http://127.0.0.1:27123/",
+        token: "",
+        rootPath: "200-AI Research"
+      }
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(capturedContent, content);
+});

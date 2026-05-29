@@ -264,6 +264,20 @@ async function resolveSnapshotForAction(msg) {
   return lastNoteSnapshotManager.readLastNoteSnapshot();
 }
 
+function applySelectedDigestModel(settings, selectedModel) {
+  const providerName = String(
+    settings?.digestProvider || (settings?.openrouter?.enableDigest ? "openrouter" : "")
+  ).trim().toLowerCase();
+  const providerKey = providerName === "opencodezen" ? "opencodezen" : "openrouter";
+  return {
+    ...settings,
+    [providerKey]: {
+      ...(settings?.[providerKey] || {}),
+      preferredModel: selectedModel
+    }
+  };
+}
+
 tabManager.setStatusNotifier(aiCommunication.notifyAIStatus);
 
 async function runTask(task) {
@@ -605,10 +619,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           return;
         }
 
-        const resaveResult = await obsidianStorage.rewriteNoteInObsidian(
+        const exportMarkdown =
+          snapshot.exportMarkdown ||
+          noteContentBuilder.buildQuestionAnswersContent(
+            snapshot.question,
+            snapshot.results,
+            settings
+          );
+        const resaveResult = await obsidianStorage.rewriteNoteContentInObsidian(
           snapshot.notePath,
-          snapshot.question,
-          snapshot.results,
+          exportMarkdown,
           settings
         );
         if (!resaveResult.ok) {
@@ -616,11 +636,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           return;
         }
 
-        const exportMarkdown = noteContentBuilder.buildQuestionAnswersContent(
-          snapshot.question,
-          snapshot.results,
-          settings
-        );
         let snapshotBase = {
           ...snapshot,
           exportMarkdown,
@@ -676,13 +691,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
         const selectedModel = String(msg.modelId || "").trim();
         const settings = await self.MirrorChatStorage.getSettings();
-        const digestSettings = {
-          ...settings,
-          openrouter: {
-            ...(settings.openrouter || {}),
-            preferredModel: selectedModel
-          }
-        };
+        const digestSettings = applySelectedDigestModel(settings, selectedModel);
         const exportMarkdown =
           snapshot.exportMarkdown ||
           noteContentBuilder.buildQuestionAnswersContent(

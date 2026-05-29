@@ -126,14 +126,13 @@
     return { ok: true };
   }
 
-  async function rewriteNoteInObsidian(notePath, question, results, settings) {
+  async function rewriteNoteContentInObsidian(notePath, content, settings) {
     const { baseUrl, token } = settings.obsidian || {};
 
     if (!noteContentBuilder.isObsidianConfigured(settings)) {
       return { ok: false, error: "ObsidianのベースURLが設定されていません" };
     }
 
-    const content = noteContentBuilder.buildQuestionAnswersContent(question, results, settings);
     const saveRes = await self.ObsidianClient.createNote(baseUrl, token, notePath, content);
     if (!saveRes.ok) {
       return { ok: false, error: saveRes.error };
@@ -142,10 +141,16 @@
     return { ok: true, notePath };
   }
 
+  async function rewriteNoteInObsidian(notePath, question, results, settings) {
+    const content = noteContentBuilder.buildQuestionAnswersContent(question, results, settings);
+    return rewriteNoteContentInObsidian(notePath, content, settings);
+  }
+
   self.MirrorChatObsidianStorage = {
     saveToObsidian,
     appendToObsidian,
     updateDigestInObsidian,
+    rewriteNoteContentInObsidian,
     rewriteNoteInObsidian,
     replaceDigestSection: noteContentBuilder.replaceDigestSection
   };
