@@ -6,8 +6,22 @@
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <main class="popup">
-      <h1>MirrorChat</h1>
+    <div id="snapshot-backdrop" class="snapshot-backdrop" hidden></div>
+    <aside id="snapshot-drawer" class="snapshot-drawer" aria-label="履歴" hidden>
+      <div class="snapshot-drawer-header">
+        <h2>履歴</h2>
+        <button id="snapshot-drawer-close" type="button" aria-label="履歴を閉じる">×</button>
+      </div>
+      <ul id="snapshot-list" class="snapshot-list"></ul>
+      <p id="snapshot-list-empty" class="snapshot-list-empty" hidden>まだ履歴がありません。</p>
+    </aside>
+    <main class="popup popup-main">
+      <header class="popup-topbar">
+        <button id="snapshot-menu-button" type="button" class="snapshot-menu-button" aria-label="履歴を開く" aria-expanded="false">
+          ☰
+        </button>
+        <h1>MirrorChat</h1>
+      </header>
       <p class="desc">AIサイトを先に開いてから、質問を送信します。</p>
 
       <section class="tab-status" id="tab-status">
@@ -64,13 +78,30 @@
           <option value="">自動選択</option>
         </select>
       </div>
+      <section id="export-section" class="export-section">
+        <div class="export-header">
+          <span id="export-preview-label">Markdown プレビュー</span>
+          <button id="copy-export-button" type="button" disabled>コピー</button>
+        </div>
+        <p id="export-status" class="export-status" aria-live="polite"></p>
+        <div
+          id="export-preview"
+          class="export-preview is-empty"
+          role="region"
+          aria-labelledby="export-preview-label"
+          data-placeholder="回答取得後にここに表示されます"
+        ></div>
+      </section>
       <section id="retry-section" class="retry-section" hidden>
         <h2>保存に失敗したデータ</h2>
-        <p>保存失敗キューに残っているデータだけを再試行します。直近ノートの上書き保存は上の「直近ノートを再保存」を使ってください。</p>
+        <p>保存失敗キューに残っているデータだけを再試行します。ノートの上書き保存は上の「再保存」を使ってください。</p>
         <button id="retry-button">失敗キューを再試行</button>
       </section>
     </main>
     <script src="constants.js"></script>
+    <script src="markdownPreview.js"></script>
+    <script src="snapshotHistoryManager.js"></script>
+    <script src="noteContentBuilder.js"></script>
     <script src="aiOrderUtils.js"></script>
     <script src="storage.js"></script>
     <script src="openRouterFreeModels.js"></script>

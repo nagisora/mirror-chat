@@ -1,10 +1,9 @@
 (function () {
   const { STORAGE_KEYS } = self.MirrorChatConstants;
+  const noteContentBuilder = self.MirrorChatNoteContentBuilder;
   const FOLDER_SEQ_KEY = STORAGE_KEYS.FOLDER_SEQ;
   const LAST_SAVED_FOLDER_KEY = STORAGE_KEYS.LAST_SAVED_FOLDER;
   const QUESTION_FILE_SEQ_KEY = STORAGE_KEYS.QUESTION_FILE_SEQ;
-  const DIGEST_PENDING_TEXT = "生成中...";
-  const DIGEST_DISABLED_TEXT = "未生成";
 
   function getQuestionExcerpt(text) {
     const cleaned = String(text)
@@ -55,84 +54,23 @@
     return `${seqStr}-${getQuestionExcerpt(question)}.md`;
   }
 
-  function buildAnswerSections(results) {
-    const parts = [];
-    for (const { name, markdown } of results) {
-      parts.push(`### ${name}\n\n${markdown || "(取得できませんでした)"}`);
-    }
-    return parts.join("\n\n---\n\n");
-  }
-
-  function buildInitialDigestText(settings) {
-    return settings?.digestProvider || settings?.openrouter?.enableDigest
-      ? DIGEST_PENDING_TEXT
-      : DIGEST_DISABLED_TEXT;
-  }
-
-  function buildQuestionAnswersContent(question, results, settings) {
-    return [
-      "## 質問",
-      "",
-      question,
-      "",
-      "---",
-      "",
-      "## まとめ",
-      "",
-      buildInitialDigestText(settings),
-      "",
-      "---",
-      "",
-      "## 各AI回答",
-      "",
-      buildAnswerSections(results)
-    ].join("\n");
-  }
-
-  function replaceDigestSection(content, digestText) {
-    const legacyStartMarker = "<!-- MIRRORCHAT_DIGEST_START -->\n";
-    const legacyEndMarker = "\n<!-- MIRRORCHAT_DIGEST_END -->";
-    const legacyStart = content.indexOf(legacyStartMarker);
-    const legacyEnd = content.indexOf(legacyEndMarker, legacyStart);
-    if (legacyStart !== -1 && legacyEnd !== -1 && legacyEnd >= legacyStart) {
-      return {
-        ok: true,
-        content: `${content.slice(0, legacyStart)}${digestText}${content.slice(legacyEnd + legacyEndMarker.length)}`
-      };
-    }
-
-    const startMarker = "## まとめ\n\n";
-    const fallbackStart = content.indexOf(startMarker);
-    if (fallbackStart === -1) {
-      return {
-        ok: false,
-        error: "まとめセクションが見つかりませんでした"
-      };
-    }
-
-    const digestStart = fallbackStart + startMarker.length;
-    const nextSection = content.indexOf("\n\n---\n\n## 各AI回答", digestStart);
-    const digestEnd = nextSection === -1 ? content.length : nextSection;
-    return {
-      ok: true,
-      content: `${content.slice(0, digestStart)}${digestText}${content.slice(digestEnd)}`
-    };
-  }
-
   async function saveToObsidian(question, results, settings) {
     const root = (settings.obsidian?.rootPath || "AI-Research").replace(/\/$/, "");
     const folder = await getObsidianFolderName(question);
     const basePath = `${root}/${folder}`;
-    const { baseUrl, token } = settings.obsidian || {};
-
-    if (!baseUrl) {
-      return { ok: false, error: "ObsidianのベースURLが設定されていません" };
-    }
-
     const questionSeq = await getNextQuestionFileSeq(basePath);
     const fileName = getQuestionFileName(question, questionSeq);
     const notePath = `${basePath}/${fileName}`;
-    const content = buildQuestionAnswersContent(question, results, settings);
+    const { baseUrl, token } = settings.obsidian || {};
+
+    if (!noteContentBuilder.isObsidianConfigured(settings)) {
+      await new Promise((resolve) =>
+        chrome.storage.local.set({ [LAST_SAVED_FOLDER_KEY]: basePath }, resolve)
+      );
+      return { ok: true, skipped: true, basePath, fileName, notePath: null };
+    }
+
+    const content = noteContentBuilder.buildQuestionAnswersContent(question, results, settings);
     const res = await self.ObsidianClient.createNote(baseUrl, token, notePath, content);
     if (!res.ok) {
       return { ok: false, error: res.error, payload: { question, results, basePath } };
@@ -145,16 +83,16 @@
   }
 
   async function appendToObsidian(basePath, question, results, settings) {
-    const { baseUrl, token } = settings.obsidian || {};
-
-    if (!baseUrl) {
-      return { ok: false, error: "ObsidianのベースURLが設定されていません" };
-    }
-
     const questionSeq = await getNextQuestionFileSeq(basePath);
     const fileName = getQuestionFileName(question, questionSeq);
     const notePath = `${basePath}/${fileName}`;
-    const content = buildQuestionAnswersContent(question, results, settings);
+    const { baseUrl, token } = settings.obsidian || {};
+
+    if (!noteContentBuilder.isObsidianConfigured(settings)) {
+      return { ok: true, skipped: true, basePath, fileName, notePath: null };
+    }
+
+    const content = noteContentBuilder.buildQuestionAnswersContent(question, results, settings);
     const res = await self.ObsidianClient.createNote(baseUrl, token, notePath, content);
     if (!res.ok) {
       return { ok: false, error: res.error };
@@ -166,7 +104,7 @@
   async function updateDigestInObsidian(notePath, digestText, settings) {
     const { baseUrl, token } = settings.obsidian || {};
 
-    if (!baseUrl) {
+    if (!noteContentBuilder.isObsidianConfigured(settings)) {
       return { ok: false, error: "ObsidianのベースURLが設定されていません" };
     }
 
@@ -175,7 +113,7 @@
       return { ok: false, error: getRes.error };
     }
 
-    const replaced = replaceDigestSection(getRes.content || "", digestText);
+    const replaced = noteContentBuilder.replaceDigestSection(getRes.content || "", digestText);
     if (!replaced.ok) {
       return { ok: false, error: replaced.error };
     }
@@ -188,14 +126,13 @@
     return { ok: true };
   }
 
-  async function rewriteNoteInObsidian(notePath, question, results, settings) {
+  async function rewriteNoteContentInObsidian(notePath, content, settings) {
     const { baseUrl, token } = settings.obsidian || {};
 
-    if (!baseUrl) {
+    if (!noteContentBuilder.isObsidianConfigured(settings)) {
       return { ok: false, error: "ObsidianのベースURLが設定されていません" };
     }
 
-    const content = buildQuestionAnswersContent(question, results, settings);
     const saveRes = await self.ObsidianClient.createNote(baseUrl, token, notePath, content);
     if (!saveRes.ok) {
       return { ok: false, error: saveRes.error };
@@ -208,7 +145,7 @@
     saveToObsidian,
     appendToObsidian,
     updateDigestInObsidian,
-    rewriteNoteInObsidian,
-    replaceDigestSection
+    rewriteNoteContentInObsidian,
+    replaceDigestSection: noteContentBuilder.replaceDigestSection
   };
 })();

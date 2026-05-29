@@ -3,16 +3,21 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
-async function loadScript(filePath) {
-  const code = await readFile(filePath, "utf8");
+async function loadNoteContentBuilder(context) {
+  const code = await readFile("./ai-prompt-broadcaster/noteContentBuilder.js", "utf8");
+  vm.runInContext(code, context, { filename: "./ai-prompt-broadcaster/noteContentBuilder.js" });
+}
+
+async function loadObsidianStorage(extraContext = {}) {
+  const storageKeys = {
+    FOLDER_SEQ: "folder",
+    LAST_SAVED_FOLDER: "last",
+    QUESTION_FILE_SEQ: "question"
+  };
   const context = vm.createContext({
     self: {
       MirrorChatConstants: {
-        STORAGE_KEYS: {
-          FOLDER_SEQ: "folder",
-          LAST_SAVED_FOLDER: "last",
-          QUESTION_FILE_SEQ: "question"
-        }
+        STORAGE_KEYS: storageKeys
       }
     },
     chrome: {
@@ -27,56 +32,131 @@ async function loadScript(filePath) {
         }
       }
     },
-    console
+    console,
+    ...extraContext
   });
-  vm.runInContext(code, context, { filename: filePath });
+  await loadNoteContentBuilder(context);
+  const code = await readFile("./ai-prompt-broadcaster/obsidianStorage.js", "utf8");
+  vm.runInContext(code, context, { filename: "./ai-prompt-broadcaster/obsidianStorage.js" });
   return context;
 }
 
-test("replaceDigestSection keeps ChatGPT answer block intact", async () => {
-  const context = await loadScript("./ai-prompt-broadcaster/obsidianStorage.js");
-  const storage = context.self.MirrorChatObsidianStorage;
-  const original = [
-    "## 質問",
-    "",
+test("saveToObsidian skips REST when baseUrl is empty", async () => {
+  const storage = new Map();
+  let createNoteCalls = 0;
+  const context = await loadObsidianStorage({
+    chrome: {
+      storage: {
+        local: {
+          get(key, callback) {
+            callback({ [key]: storage.get(key) || {} });
+          },
+          set(value, callback) {
+            Object.entries(value).forEach(([key, entry]) => storage.set(key, entry));
+            callback();
+          }
+        }
+      }
+    },
+    self: {
+      MirrorChatConstants: {
+        STORAGE_KEYS: {
+          FOLDER_SEQ: "folder",
+          LAST_SAVED_FOLDER: "last",
+          QUESTION_FILE_SEQ: "question"
+        }
+      },
+      ObsidianClient: {
+        async createNote() {
+          createNoteCalls += 1;
+          return { ok: true };
+        }
+      }
+    }
+  });
+
+  const obsidianStorage = context.self.MirrorChatObsidianStorage;
+  const result = await obsidianStorage.saveToObsidian(
     "質問本文",
-    "",
-    "---",
-    "",
-    "## まとめ",
-    "",
-    "生成中...",
-    "",
-    "---",
-    "",
-    "## 各AI回答",
-    "",
-    "### ChatGPT",
-    "",
-    "ChatGPT の回答",
-    "",
-    "---",
-    "",
-    "### Claude",
-    "",
-    "Claude の回答"
-  ].join("\n");
+    [{ name: "ChatGPT", markdown: "回答本文" }],
+    {
+      obsidian: {
+        baseUrl: "",
+        token: "",
+        rootPath: "200-AI Research"
+      }
+    }
+  );
 
-  const replaced = storage.replaceDigestSection(original, "要約本文\n\n<sub>要約モデル: openrouter/test</sub>");
+  assert.equal(result.ok, true);
+  assert.equal(result.skipped, true);
+  assert.equal(result.notePath, null);
+  assert.ok(result.basePath);
+  assert.ok(result.fileName);
+  assert.equal(createNoteCalls, 0);
+  assert.equal(storage.get("last"), result.basePath);
+});
 
-  assert.equal(replaced.ok, true);
-  assert.match(replaced.content, /### ChatGPT\n\nChatGPT の回答/);
-  assert.match(replaced.content, /### Claude\n\nClaude の回答/);
-  assert.match(replaced.content, /要約モデル: openrouter\/test/);
-  assert.ok(!replaced.content.includes("MIRRORCHAT_DIGEST_START"));
-  assert.ok(!replaced.content.includes("MIRRORCHAT_DIGEST_END"));
+test("appendToObsidian skips REST and advances question file seq", async () => {
+  const storage = new Map();
+  let createNoteCalls = 0;
+  const context = await loadObsidianStorage({
+    chrome: {
+      storage: {
+        local: {
+          get(key, callback) {
+            callback({ [key]: storage.get(key) || {} });
+          },
+          set(value, callback) {
+            Object.entries(value).forEach(([key, entry]) => storage.set(key, entry));
+            callback();
+          }
+        }
+      }
+    },
+    self: {
+      MirrorChatConstants: {
+        STORAGE_KEYS: {
+          FOLDER_SEQ: "folder",
+          LAST_SAVED_FOLDER: "last",
+          QUESTION_FILE_SEQ: "question"
+        }
+      },
+      ObsidianClient: {
+        async createNote() {
+          createNoteCalls += 1;
+          return { ok: true };
+        }
+      }
+    }
+  });
+
+  const obsidianStorage = context.self.MirrorChatObsidianStorage;
+  const basePath = "200-AI Research/20260101-01-test";
+  const first = await obsidianStorage.appendToObsidian(
+    basePath,
+    "続きの質問",
+    [{ name: "ChatGPT", markdown: "回答" }],
+    { obsidian: { baseUrl: "", token: "", rootPath: "200-AI Research" } }
+  );
+  const second = await obsidianStorage.appendToObsidian(
+    basePath,
+    "続きの質問2",
+    [{ name: "ChatGPT", markdown: "回答2" }],
+    { obsidian: { baseUrl: "", token: "", rootPath: "200-AI Research" } }
+  );
+
+  assert.equal(first.ok, true);
+  assert.equal(first.skipped, true);
+  assert.equal(second.ok, true);
+  assert.equal(createNoteCalls, 0);
+  assert.notEqual(first.fileName, second.fileName);
 });
 
 test("saveToObsidian writes pending digest placeholder for provider-based digest", async () => {
   const storage = new Map();
   let capturedContent = "";
-  const code = await readFile("./ai-prompt-broadcaster/obsidianStorage.js", "utf8");
-  const context = vm.createContext({
+  const context = await loadObsidianStorage({
     self: {
       MirrorChatConstants: {
         STORAGE_KEYS: {
@@ -104,10 +184,8 @@ test("saveToObsidian writes pending digest placeholder for provider-based digest
           }
         }
       }
-    },
-    console
+    }
   });
-  vm.runInContext(code, context, { filename: "./ai-prompt-broadcaster/obsidianStorage.js" });
 
   const obsidianStorage = context.self.MirrorChatObsidianStorage;
   const result = await obsidianStorage.saveToObsidian(
@@ -124,5 +202,43 @@ test("saveToObsidian writes pending digest placeholder for provider-based digest
   );
 
   assert.equal(result.ok, true);
-  assert.match(capturedContent, /## まとめ\n\n生成中.../);
+  assert.match(capturedContent, /## まとめ\n\n生成中\.\.\./);
+});
+
+test("rewriteNoteContentInObsidian preserves provided markdown content", async () => {
+  let capturedContent = "";
+  const context = await loadObsidianStorage({
+    self: {
+      MirrorChatConstants: {
+        STORAGE_KEYS: {
+          FOLDER_SEQ: "folder",
+          LAST_SAVED_FOLDER: "last",
+          QUESTION_FILE_SEQ: "question"
+        }
+      },
+      ObsidianClient: {
+        async createNote(_baseUrl, _token, _notePath, content) {
+          capturedContent = content;
+          return { ok: true };
+        }
+      }
+    }
+  });
+
+  const obsidianStorage = context.self.MirrorChatObsidianStorage;
+  const content = "## 質問\n\nQ\n\n---\n\n## まとめ\n\n既存のまとめ";
+  const result = await obsidianStorage.rewriteNoteContentInObsidian(
+    "path/to/note.md",
+    content,
+    {
+      obsidian: {
+        baseUrl: "http://127.0.0.1:27123/",
+        token: "",
+        rootPath: "200-AI Research"
+      }
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(capturedContent, content);
 });

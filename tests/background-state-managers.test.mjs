@@ -73,7 +73,12 @@ test("lastNoteSnapshotManager reads and writes snapshots", async () => {
     }
   });
   const manager = context.self.MirrorChatLastNoteSnapshotManager;
-  const snapshot = { notePath: "folder/file.md", question: "質問", results: [] };
+  const snapshot = {
+    notePath: "folder/file.md",
+    question: "質問",
+    results: [],
+    exportMarkdown: "## 質問\n\n質問\n\n---\n\n## まとめ\n\n未生成"
+  };
 
   assert.equal(await manager.readLastNoteSnapshot(), null);
   await manager.writeLastNoteSnapshot(snapshot);

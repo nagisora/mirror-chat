@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MirrorChat: AI一括質問＆Obsidian保存ツール",
-  "description": "1つのプロンプトを複数AI（ChatGPT, Claude, Gemini, Grok）に順次送信し、ObsidianにMarkdownとして保存します。",
+  "description": "1つのプロンプトを複数AI（ChatGPT, Claude, Gemini, Grok）に順次送信し、Obsidian保存またはMarkdown出力で結果をまとめます。",
   "version": "0.1.0",
   "icons": {
     "128": "icon128.png"
