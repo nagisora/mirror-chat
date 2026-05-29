@@ -80,16 +80,17 @@
       </div>
       <section id="export-section" class="export-section">
         <div class="export-header">
-          <label for="export-output">Markdown 出力</label>
+          <span id="export-preview-label">Markdown プレビュー</span>
           <button id="copy-export-button" type="button" disabled>コピー</button>
         </div>
         <p id="export-status" class="export-status" aria-live="polite"></p>
-        <textarea
-          id="export-output"
-          readonly
-          rows="12"
-          placeholder="回答取得後にここに表示されます"
-        ></textarea>
+        <div
+          id="export-preview"
+          class="export-preview is-empty"
+          role="region"
+          aria-labelledby="export-preview-label"
+          data-placeholder="回答取得後にここに表示されます"
+        ></div>
       </section>
       <section id="retry-section" class="retry-section" hidden>
         <h2>保存に失敗したデータ</h2>
@@ -98,6 +99,7 @@
       </section>
     </main>
     <script src="constants.js"></script>
+    <script src="markdownPreview.js"></script>
     <script src="snapshotHistoryManager.js"></script>
     <script src="noteContentBuilder.js"></script>
     <script src="aiOrderUtils.js"></script>

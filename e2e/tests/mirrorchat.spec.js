@@ -20,10 +20,10 @@ test.describe("MirrorChat 拡張機能", () => {
     await expect(page.locator("#collect-button")).toBeVisible();
     await expect(page.locator("#resave-button")).toBeVisible();
     await expect(page.locator("#snapshot-menu-button")).toBeVisible();
-    await expect(page.locator("#export-output")).toBeVisible();
+    await expect(page.locator("#export-preview")).toBeVisible();
     await expect(page.locator("#export-status")).toBeVisible();
     await expect(page.locator("#copy-export-button")).toBeVisible();
-    await expect(page.locator("#export-output")).toHaveValue("");
+    await expect(page.locator("#export-preview")).toHaveClass(/is-empty/);
     await expect(page.locator("#regenerate-digest-button")).toBeVisible();
     await expect(page.locator("#digest-model-select")).toBeVisible();
     await expect(page.locator("#digest-status")).toBeVisible();
@@ -299,7 +299,8 @@ test.describe("MirrorChat 拡張機能", () => {
     await expect(page.locator(".snapshot-list-button span")).toContainText("履歴テスト質問");
 
     await page.locator(".snapshot-list-button").click();
-    await expect(page.locator("#export-output")).toHaveValue(/履歴テスト質問/);
+    await expect(page.locator("#export-preview")).toContainText("履歴テスト質問");
+    await expect(page.locator("#export-preview h2")).toContainText("質問");
     await expect(page.locator("#export-status")).toContainText(/履歴を表示/);
   });
 
@@ -345,23 +346,20 @@ test.describe("MirrorChat 拡張機能", () => {
     }, exportMarkdown);
 
     await page.reload();
+    await page.waitForFunction(async () => {
+      const manager = window.MirrorChatSnapshotHistoryManager;
+      if (!manager?.readSnapshotHistory) return false;
+      const history = await manager.readSnapshotHistory();
+      return history.length === 1;
+    });
 
-    await expect(page.locator("#export-output")).toHaveValue("");
+    await expect(page.locator("#export-preview")).toHaveClass(/is-empty/);
     await expect(page.locator("#export-status")).toHaveText("");
     await expect(page.locator("#regenerate-digest-button")).toBeEnabled();
 
-    await page.evaluate((markdown) => {
-      const output = document.getElementById("export-output");
-      const copyButton = document.getElementById("copy-export-button");
-      const status = document.getElementById("export-status");
-      if (output) output.value = markdown;
-      if (copyButton) copyButton.disabled = false;
-      if (status) {
-        status.textContent = "Markdown を出力しました。コピーできます。";
-        status.dataset.tone = "success";
-      }
-    }, exportMarkdown);
-
+    await page.locator("#snapshot-menu-button").click();
+    await page.locator(".snapshot-list-button").click();
+    await expect(page.locator("#export-preview")).toContainText("テスト質問");
     await expect(page.locator("#copy-export-button")).toBeEnabled();
     await page.locator("#copy-export-button").click();
     await expect(page.locator("#export-status")).toContainText(/コピー/, { timeout: 5_000 });

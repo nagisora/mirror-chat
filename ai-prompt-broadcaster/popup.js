@@ -32,8 +32,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   const resaveButton = document.getElementById("resave-button");
   const regenerateDigestButton = document.getElementById("regenerate-digest-button");
   const digestModelSelect = document.getElementById("digest-model-select");
-  const exportOutput = document.getElementById("export-output");
+  const exportPreview = document.getElementById("export-preview");
   const copyExportButton = document.getElementById("copy-export-button");
+  const markdownPreview = window.MirrorChatMarkdownPreview;
   const exportStatus = document.getElementById("export-status");
   const snapshotMenuButton = document.getElementById("snapshot-menu-button");
   const snapshotDrawer = document.getElementById("snapshot-drawer");
@@ -232,8 +233,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (copyExportButton) {
       copyExportButton.disabled = !appState.hasLastExport;
     }
-    if (exportOutput) {
-      exportOutput.value = appState.exportMarkdown || "";
+    if (exportPreview && markdownPreview?.renderToElement) {
+      markdownPreview.renderToElement(exportPreview, appState.exportMarkdown || "");
     }
     if (exportStatus) {
       exportStatus.textContent = appState.exportStatusText || "";
@@ -636,9 +637,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   async function copyExportMarkdown() {
-    const text = (appState.exportMarkdown || exportOutput?.value || "").trim();
+    const text = (appState.exportMarkdown || "").trim();
     if (!text) {
-      setState({ statusText: "コピーする Markdown がありません。" });
+      setState({
+        exportStatusText: "コピーする Markdown がありません。",
+        exportStatusTone: "info"
+      });
       return;
     }
     try {
@@ -648,13 +652,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         exportStatusTone: "success"
       });
     } catch (error) {
-      if (exportOutput) {
-        exportOutput.focus();
-        exportOutput.select();
-      }
       setState({
         exportStatusText:
-          "クリップボードにコピーできませんでした。テキストを選択して手動でコピーしてください。",
+          "クリップボードにコピーできませんでした。Markdown の再取得後にもう一度お試しください。",
         exportStatusTone: "error"
       });
       console.warn("MirrorChat: export copy failed:", error);
