@@ -233,9 +233,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (copyExportButton) {
       copyExportButton.disabled = !appState.hasLastExport;
     }
-    if (exportPreview && markdownPreview?.renderToElement) {
-      markdownPreview.renderToElement(exportPreview, appState.exportMarkdown || "");
-    }
+    markdownPreview.renderToElement(exportPreview, appState.exportMarkdown || "");
     if (exportStatus) {
       exportStatus.textContent = appState.exportStatusText || "";
       exportStatus.dataset.tone = appState.exportStatusTone || "info";
@@ -325,7 +323,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       exportMarkdown: markdown,
       hasLastExport: snapshotHasExportData(snapshot),
       hasLastObsidianNote:
-        !!snapshot.notePath && !!noteContentBuilder?.isObsidianConfigured?.(settings),
+        !!snapshot.notePath && noteContentBuilder.isObsidianConfigured(settings),
       exportStatusText: markdown ? "履歴を表示しています。コピーできます。" : "この履歴には Markdown がありません。",
       exportStatusTone: markdown ? "success" : "info",
       snapshotDrawerOpen: false
@@ -363,11 +361,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (snapshot?.exportMarkdown) {
       return snapshot.exportMarkdown;
     }
-    if (
-      snapshot?.question &&
-      Array.isArray(snapshot?.results) &&
-      noteContentBuilder?.buildQuestionAnswersContent
-    ) {
+    if (snapshot?.question && Array.isArray(snapshot?.results)) {
       return noteContentBuilder.buildQuestionAnswersContent(
         snapshot.question,
         snapshot.results,
@@ -389,7 +383,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       : history[0] || null;
     const hasLastExport = snapshotHasExportData(metadataSnapshot);
     const hasLastObsidianNote =
-      !!metadataSnapshot?.notePath && !!noteContentBuilder?.isObsidianConfigured?.(settings);
+      !!metadataSnapshot?.notePath && noteContentBuilder.isObsidianConfigured(settings);
     setState({
       aiOrder: nextOrder,
       enabledAIs: normalizeEnabledAIs(appState.enabledAIs, nextOrder),

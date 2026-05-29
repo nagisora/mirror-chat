@@ -141,17 +141,11 @@
     return { ok: true, notePath };
   }
 
-  async function rewriteNoteInObsidian(notePath, question, results, settings) {
-    const content = noteContentBuilder.buildQuestionAnswersContent(question, results, settings);
-    return rewriteNoteContentInObsidian(notePath, content, settings);
-  }
-
   self.MirrorChatObsidianStorage = {
     saveToObsidian,
     appendToObsidian,
     updateDigestInObsidian,
     rewriteNoteContentInObsidian,
-    rewriteNoteInObsidian,
     replaceDigestSection: noteContentBuilder.replaceDigestSection
   };
 })();

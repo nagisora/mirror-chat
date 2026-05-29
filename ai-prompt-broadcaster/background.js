@@ -413,7 +413,6 @@ async function runTask(task) {
       basePath: saveResult.ok ? saveResult.basePath || null : null,
       fileName: saveResult.ok ? saveResult.fileName || null : null,
       isFollowUp: !!task.isFollowUp,
-      obsidianSkipped: !!saveResult.skipped,
       exportMarkdown,
       savedAt: Date.now()
     };

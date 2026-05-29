@@ -1,6 +1,3 @@
-/**
- * 拡張ポップアップ用の軽量 Markdown → HTML プレビュー（XSS 対策のためエスケープ後に変換）
- */
 (function () {
   function escapeHtml(text) {
     return String(text)
@@ -134,17 +131,8 @@
     element.innerHTML = renderMarkdown(text);
   }
 
-  const api = {
-    escapeHtml,
-    renderInline,
+  self.MirrorChatMarkdownPreview = {
     renderMarkdown,
     renderToElement
   };
-
-  if (typeof self !== "undefined") {
-    self.MirrorChatMarkdownPreview = api;
-  }
-  if (typeof window !== "undefined") {
-    window.MirrorChatMarkdownPreview = api;
-  }
 })();
