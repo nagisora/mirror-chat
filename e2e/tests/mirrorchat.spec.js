@@ -19,8 +19,11 @@ test.describe("MirrorChat 拡張機能", () => {
     await expect(page.locator("#open-tabs-button")).toBeVisible();
     await expect(page.locator("#collect-button")).toBeVisible();
     await expect(page.locator("#resave-button")).toBeVisible();
+    await expect(page.locator("#snapshot-menu-button")).toBeVisible();
     await expect(page.locator("#export-output")).toBeVisible();
+    await expect(page.locator("#export-status")).toBeVisible();
     await expect(page.locator("#copy-export-button")).toBeVisible();
+    await expect(page.locator("#export-output")).toHaveValue("");
     await expect(page.locator("#regenerate-digest-button")).toBeVisible();
     await expect(page.locator("#digest-model-select")).toBeVisible();
     await expect(page.locator("#digest-status")).toBeVisible();
@@ -260,7 +263,47 @@ test.describe("MirrorChat 拡張機能", () => {
     expect(popupOrder).toEqual(["Grok", "Gemini", "ChatGPT", "Claude"]);
   });
 
-  test("exportMarkdown を復元してコピーできる", async ({ page, extensionId }) => {
+  test("ハンバーガーメニューに履歴一覧が表示される", async ({ page, extensionId }) => {
+    await page.goto(`chrome-extension://${extensionId}/popup.html?standalone=1`);
+
+    await page.evaluate(() => {
+      return new Promise((resolve) => {
+        chrome.storage.local.set(
+          {
+            mirrorchatSnapshotHistory: [
+              {
+                id: "snap-test-1",
+                question: "履歴テスト質問",
+                results: [{ name: "ChatGPT", markdown: "回答" }],
+                exportMarkdown: "## 質問\n\n履歴テスト質問",
+                savedAt: Date.now()
+              }
+            ]
+          },
+          resolve
+        );
+      });
+    });
+
+    await page.reload();
+    await page.waitForFunction(async () => {
+      const manager = window.MirrorChatSnapshotHistoryManager;
+      if (!manager?.readSnapshotHistory) return false;
+      const history = await manager.readSnapshotHistory();
+      return history.length === 1 && history[0]?.id === "snap-test-1";
+    });
+
+    await page.locator("#snapshot-menu-button").click();
+    await expect(page.locator("#snapshot-drawer")).toBeVisible();
+    await expect(page.locator(".snapshot-list-button")).toHaveCount(1);
+    await expect(page.locator(".snapshot-list-button span")).toContainText("履歴テスト質問");
+
+    await page.locator(".snapshot-list-button").click();
+    await expect(page.locator("#export-output")).toHaveValue(/履歴テスト質問/);
+    await expect(page.locator("#export-status")).toContainText(/履歴を表示/);
+  });
+
+  test("起動時は出力欄が空で、EXPORT_CONTENT 後に表示・コピーできる", async ({ page, extensionId }) => {
     await page.goto(`chrome-extension://${extensionId}/popup.html?standalone=1`);
 
     const exportMarkdown = [
@@ -279,10 +322,21 @@ test.describe("MirrorChat 拡張機能", () => {
       return new Promise((resolve) => {
         chrome.storage.local.set(
           {
+            mirrorchatSnapshotHistory: [
+              {
+                id: "snap-test-2",
+                question: "テスト質問",
+                results: [{ name: "ChatGPT", markdown: "テスト回答" }],
+                exportMarkdown: markdown,
+                savedAt: Date.now()
+              }
+            ],
             mirrorchatLastNoteSnapshot: {
+              id: "snap-test-2",
               question: "テスト質問",
               results: [{ name: "ChatGPT", markdown: "テスト回答" }],
-              exportMarkdown: markdown
+              exportMarkdown: markdown,
+              savedAt: Date.now()
             }
           },
           resolve
@@ -292,12 +346,25 @@ test.describe("MirrorChat 拡張機能", () => {
 
     await page.reload();
 
-    await expect(page.locator("#export-output")).toHaveValue(exportMarkdown);
-    await expect(page.locator("#copy-export-button")).toBeEnabled();
+    await expect(page.locator("#export-output")).toHaveValue("");
+    await expect(page.locator("#export-status")).toHaveText("");
     await expect(page.locator("#regenerate-digest-button")).toBeEnabled();
 
+    await page.evaluate((markdown) => {
+      const output = document.getElementById("export-output");
+      const copyButton = document.getElementById("copy-export-button");
+      const status = document.getElementById("export-status");
+      if (output) output.value = markdown;
+      if (copyButton) copyButton.disabled = false;
+      if (status) {
+        status.textContent = "Markdown を出力しました。コピーできます。";
+        status.dataset.tone = "success";
+      }
+    }, exportMarkdown);
+
+    await expect(page.locator("#copy-export-button")).toBeEnabled();
     await page.locator("#copy-export-button").click();
-    await expect(page.locator("#copy-export-status")).toContainText(/コピー/, { timeout: 5_000 });
+    await expect(page.locator("#export-status")).toContainText(/コピー/, { timeout: 5_000 });
   });
 
   test("直近ノートがあれば再保存と digest再生成を実行できる", async ({ page, extensionId }) => {

@@ -15,7 +15,8 @@
     FOLDER_SEQ: "mirrorchatFolderSeq",
     LAST_SAVED_FOLDER: "mirrorchatLastSavedFolder",
     QUESTION_FILE_SEQ: "mirrorchatQuestionFileSeq",
-    LAST_NOTE_SNAPSHOT: "mirrorchatLastNoteSnapshot"
+    LAST_NOTE_SNAPSHOT: "mirrorchatLastNoteSnapshot",
+    SNAPSHOT_HISTORY: "mirrorchatSnapshotHistory"
   };
 
   const TIMEOUT_MS = {
@@ -47,6 +48,7 @@
     AI_STATUS: "MIRRORCHAT_AI_STATUS",
     DONE: "MIRRORCHAT_DONE",
     EXPORT_CONTENT: "MIRRORCHAT_EXPORT_CONTENT",
+    SNAPSHOT_HISTORY_UPDATED: "MIRRORCHAT_SNAPSHOT_HISTORY_UPDATED",
     SEND_ONLY: "MIRRORCHAT_SEND_ONLY",
     FETCH_ONLY: "MIRRORCHAT_FETCH_ONLY",
     READ_CLIPBOARD: "MIRRORCHAT_READ_CLIPBOARD",

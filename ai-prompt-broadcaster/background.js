@@ -4,6 +4,7 @@ importScripts(
   "storage.js",
   "currentTaskManager.js",
   "lastNoteSnapshotManager.js",
+  "snapshotHistoryManager.js",
   "offscreenManager.js",
   "obsidianClient.js",
   "openRouterFreeModels.js",
@@ -45,6 +46,7 @@ const aiCommunication = self.MirrorChatAICommunication;
 const digestService = self.MirrorChatDigestService;
 const currentTaskManager = self.MirrorChatCurrentTaskManager;
 const lastNoteSnapshotManager = self.MirrorChatLastNoteSnapshotManager;
+const snapshotHistoryManager = self.MirrorChatSnapshotHistoryManager;
 const offscreenManager = self.MirrorChatOffscreenManager;
 const noteContentBuilder = self.MirrorChatNoteContentBuilder;
 
@@ -55,9 +57,20 @@ function sendExportContent(markdown) {
   });
 }
 
-async function writeLastNoteSnapshotAndNotify(snapshot) {
-  await lastNoteSnapshotManager.writeLastNoteSnapshot(snapshot);
-  sendExportContent(snapshot.exportMarkdown || "");
+function notifySnapshotHistoryUpdated() {
+  chrome.runtime.sendMessage?.({
+    type: MESSAGE_TYPES.SNAPSHOT_HISTORY_UPDATED
+  });
+}
+
+async function writeLastNoteSnapshotAndNotify(snapshot, options = {}) {
+  const entry = options.updateId
+    ? await snapshotHistoryManager.updateSnapshot(options.updateId, snapshot)
+    : await snapshotHistoryManager.appendSnapshot(snapshot);
+  await lastNoteSnapshotManager.writeLastNoteSnapshot(entry);
+  sendExportContent(entry.exportMarkdown || "");
+  notifySnapshotHistoryUpdated();
+  return entry;
 }
 
 function sendDigestStatus(text, options = {}) {
@@ -158,10 +171,13 @@ async function runDigestFollowUp({
 
   if (snapshotBase) {
     try {
-      await writeLastNoteSnapshotAndNotify({
-        ...snapshotBase,
-        exportMarkdown: replaced.content
-      });
+      await writeLastNoteSnapshotAndNotify(
+        {
+          ...snapshotBase,
+          exportMarkdown: replaced.content
+        },
+        { updateId: snapshotBase.id }
+      );
     } catch (error) {
       sendDigestStatus("digest を Markdown 出力へ反映できませんでした。", {
         tone: "error",
@@ -236,6 +252,15 @@ async function runDigestFollowUp({
 
 function resolveEnabledAIs(rawEnabledAIs, aiOrder) {
   return aiOrderUtils.resolveEnabledAIs(rawEnabledAIs, aiOrder);
+}
+
+async function resolveSnapshotForAction(msg) {
+  const snapshotId = String(msg?.snapshotId || "").trim();
+  if (snapshotId) {
+    const found = await snapshotHistoryManager.getSnapshotById(snapshotId);
+    if (found) return found;
+  }
+  return lastNoteSnapshotManager.readLastNoteSnapshot();
 }
 
 tabManager.setStatusNotifier(aiCommunication.notifyAIStatus);
@@ -378,7 +403,7 @@ async function runTask(task) {
       savedAt: Date.now()
     };
     try {
-      await writeLastNoteSnapshotAndNotify(snapshotBase);
+      snapshotBase = await writeLastNoteSnapshotAndNotify(snapshotBase);
     } catch (error) {
       console.warn("MirrorChat: 直近ノート情報の保存に失敗しました:", error);
       if (saveResult.ok) {
@@ -561,12 +586,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     [MESSAGE_TYPES.RESAVE_LAST]: () => {
       (async () => {
-        const snapshot = await lastNoteSnapshotManager.readLastNoteSnapshot();
+        const snapshot = await resolveSnapshotForAction(msg);
         const settings = await self.MirrorChatStorage.getSettings();
         if (!snapshot?.question || !Array.isArray(snapshot?.results)) {
           sendResponse({
             ok: false,
-            error: "再保存できる直近ノートがありません。まず通常の保存を一度実行してください。"
+            error: "再保存できるノートがありません。まず通常の保存を一度実行してください。"
           });
           return;
         }
@@ -595,18 +620,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           snapshot.results,
           settings
         );
-        const snapshotBase = {
+        let snapshotBase = {
           ...snapshot,
           exportMarkdown,
           savedAt: Date.now()
         };
         try {
-          await writeLastNoteSnapshotAndNotify(snapshotBase);
+          snapshotBase = await writeLastNoteSnapshotAndNotify(snapshotBase, {
+            updateId: snapshot.id
+          });
         } catch (error) {
           console.warn("MirrorChat: 再保存後のスナップショット更新に失敗しました:", error);
         }
 
-        aiCommunication.sendStatusText("直近ノートを再保存しました。");
+        aiCommunication.sendStatusText("ノートを再保存しました。");
 
         if (digestService.isDigestEnabled(settings)) {
           runDigestFollowUp({
@@ -636,12 +663,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     [MESSAGE_TYPES.REGENERATE_DIGEST]: () => {
       (async () => {
-        const snapshot = await lastNoteSnapshotManager.readLastNoteSnapshot();
+        const snapshot = await resolveSnapshotForAction(msg);
         if (!snapshot?.question || !Array.isArray(snapshot?.results)) {
           sendResponse({
             ok: false,
             error:
-              "digest を再生成できる直近の回答がありません。まず「回答を取得」を一度実行してください。"
+              "digest を再生成できる回答がありません。まず「回答を取得」を一度実行してください。"
           });
           return;
         }
