@@ -18,8 +18,12 @@
   }
 
   async function readRawHistory() {
-    const data = await new Promise((resolve) => {
+    const data = await new Promise((resolve, reject) => {
       chrome.storage.local.get(SNAPSHOT_HISTORY_KEY, (items) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
         resolve(items?.[SNAPSHOT_HISTORY_KEY]);
       });
     });

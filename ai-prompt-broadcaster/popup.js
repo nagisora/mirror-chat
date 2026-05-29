@@ -318,7 +318,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const snapshot = history.find((entry) => entry.id === snapshotId);
     if (!snapshot) return;
     const settings = await storage.getSettings();
-    const markdown = snapshot.exportMarkdown || "";
+    const markdown = resolveExportMarkdown(snapshot, settings);
     setState({
       snapshotHistory: history,
       activeSnapshotId: snapshot.id,
@@ -357,6 +357,24 @@ document.addEventListener("DOMContentLoaded", async () => {
   function snapshotHasExportData(snapshot) {
     if (snapshot?.exportMarkdown) return true;
     return !!(snapshot?.question && Array.isArray(snapshot?.results) && snapshot.results.length > 0);
+  }
+
+  function resolveExportMarkdown(snapshot, settings) {
+    if (snapshot?.exportMarkdown) {
+      return snapshot.exportMarkdown;
+    }
+    if (
+      snapshot?.question &&
+      Array.isArray(snapshot?.results) &&
+      noteContentBuilder?.buildQuestionAnswersContent
+    ) {
+      return noteContentBuilder.buildQuestionAnswersContent(
+        snapshot.question,
+        snapshot.results,
+        settings
+      );
+    }
+    return "";
   }
 
   async function syncLastSavedNoteState() {
@@ -561,7 +579,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       } else {
         setState({
           busyAction: "",
-          statusText: "直近ノートを再保存しました。"
+          statusText: "ノートを再保存しました。"
         });
       }
       await syncLastSavedNoteState();
@@ -728,24 +746,36 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     if (msg.type === MSG_EXPORT_CONTENT) {
       const markdown = msg.markdown || "";
+      const snapshotId = String(msg.snapshotId || "").trim();
       void (async () => {
         const history = await snapshotHistoryManager.readSnapshotHistory();
-        const latest = history[0] || null;
-        setState({
-          snapshotHistory: history,
-          activeSnapshotId: latest?.id || null,
-          exportMarkdown: markdown,
-          hasLastExport: !!markdown,
-          exportStatusText: markdown
-            ? "Markdown を出力しました。コピーできます。"
-            : "",
-          exportStatusTone: markdown ? "success" : "info"
-        });
+        const activeId = appState.activeSnapshotId;
+        const shouldUpdateView =
+          !activeId || (snapshotId ? activeId === snapshotId : activeId === history[0]?.id);
+        const patch = { snapshotHistory: history };
+        if (shouldUpdateView) {
+          Object.assign(patch, {
+            activeSnapshotId: snapshotId || history[0]?.id || null,
+            exportMarkdown: markdown,
+            hasLastExport: !!markdown,
+            exportStatusText: markdown
+              ? "Markdown を出力しました。コピーできます。"
+              : "",
+            exportStatusTone: markdown ? "success" : "info"
+          });
+        }
+        setState(patch);
       })();
       return;
     }
     if (msg.type === MSG_SNAPSHOT_HISTORY_UPDATED) {
-      void syncLastSavedNoteState();
+      void (async () => {
+        const selectedId = appState.activeSnapshotId;
+        await syncLastSavedNoteState();
+        if (selectedId) {
+          await applySelectedSnapshot(selectedId);
+        }
+      })();
       return;
     }
     if (msg.type === MSG_DONE) {

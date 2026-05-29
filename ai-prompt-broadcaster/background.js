@@ -50,10 +50,11 @@ const snapshotHistoryManager = self.MirrorChatSnapshotHistoryManager;
 const offscreenManager = self.MirrorChatOffscreenManager;
 const noteContentBuilder = self.MirrorChatNoteContentBuilder;
 
-function sendExportContent(markdown) {
+function sendExportContent(markdown, snapshotId) {
   chrome.runtime.sendMessage?.({
     type: MESSAGE_TYPES.EXPORT_CONTENT,
-    markdown: markdown || ""
+    markdown: markdown || "",
+    snapshotId: snapshotId || ""
   });
 }
 
@@ -68,7 +69,7 @@ async function writeLastNoteSnapshotAndNotify(snapshot, options = {}) {
     ? await snapshotHistoryManager.updateSnapshot(options.updateId, snapshot)
     : await snapshotHistoryManager.appendSnapshot(snapshot);
   await lastNoteSnapshotManager.writeLastNoteSnapshot(entry);
-  sendExportContent(entry.exportMarkdown || "");
+  sendExportContent(entry.exportMarkdown || "", entry.id);
   notifySnapshotHistoryUpdated();
   return entry;
 }
