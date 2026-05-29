@@ -2,9 +2,9 @@
 
 [English](README.md) | [日本語](README_ja.md)
 
-MirrorChat is a Chrome extension that sends one prompt to four AI services in sequence and saves the results to Obsidian as Markdown.
+MirrorChat is a Chrome extension that sends one prompt to four AI services in sequence and collects the results as Markdown.
 
-It opens ChatGPT, Claude, Gemini, and Grok, submits the same question to each service, and stores every response in your Obsidian vault. It is built for people who want to compare model outputs and keep their research archive in Obsidian.
+It opens ChatGPT, Claude, Gemini, and Grok, submits the same question to each service, and shows a combined Markdown export you can copy. Optionally, it can also save to your Obsidian vault through the Local REST API plugin.
 
 <img src="docs/images/mirrorchat-popup-en.png" alt="MirrorChat popup screenshot" width="454">
 
@@ -15,7 +15,8 @@ It opens ChatGPT, Claude, Gemini, and Grok, submits the same question to each se
 ## Features
 
 - Send one question to ChatGPT, Claude, Gemini, and Grok in sequence
-- Save responses to Obsidian through the Local REST API plugin
+- Export combined Markdown in the UI and copy it to the clipboard
+- Save responses to Obsidian through the Local REST API plugin (optional)
 - Generate an asynchronous digest with a free OpenRouter model after the raw answers are saved
 - Refresh OpenRouter free-model candidates from `/models`
 - Use a two-step flow: open sites first, then send prompts after login is ready

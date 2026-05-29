@@ -64,6 +64,19 @@
           <option value="">自動選択</option>
         </select>
       </div>
+      <section id="export-section" class="export-section">
+        <label for="export-output">Markdown 出力</label>
+        <textarea
+          id="export-output"
+          readonly
+          rows="8"
+          placeholder="回答取得後にここに表示されます"
+        ></textarea>
+        <div class="actions export-actions">
+          <button id="copy-export-button" type="button" disabled>コピー</button>
+          <span id="copy-export-status" class="status" aria-live="polite"></span>
+        </div>
+      </section>
       <section id="retry-section" class="retry-section" hidden>
         <h2>保存に失敗したデータ</h2>
         <p>保存失敗キューに残っているデータだけを再試行します。直近ノートの上書き保存は上の「直近ノートを再保存」を使ってください。</p>
@@ -71,6 +84,7 @@
       </section>
     </main>
     <script src="constants.js"></script>
+    <script src="noteContentBuilder.js"></script>
     <script src="aiOrderUtils.js"></script>
     <script src="storage.js"></script>
     <script src="openRouterFreeModels.js"></script>

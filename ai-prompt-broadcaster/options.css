@@ -15,6 +15,12 @@ h2 {
   margin-bottom: 8px;
 }
 
+.hint {
+  font-size: 12px;
+  color: #666;
+  margin: 0 0 8px;
+}
+
 h3 {
   font-size: 14px;
   margin-top: 12px;

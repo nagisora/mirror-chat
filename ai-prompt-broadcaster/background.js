@@ -13,6 +13,7 @@ importScripts(
   "digestService.js",
   "taskQueue.js",
   "errorRetry.js",
+  "noteContentBuilder.js",
   "obsidianStorage.js",
   "tabManager.js",
   "aiCommunication.js"
@@ -45,6 +46,19 @@ const digestService = self.MirrorChatDigestService;
 const currentTaskManager = self.MirrorChatCurrentTaskManager;
 const lastNoteSnapshotManager = self.MirrorChatLastNoteSnapshotManager;
 const offscreenManager = self.MirrorChatOffscreenManager;
+const noteContentBuilder = self.MirrorChatNoteContentBuilder;
+
+function sendExportContent(markdown) {
+  chrome.runtime.sendMessage?.({
+    type: MESSAGE_TYPES.EXPORT_CONTENT,
+    markdown: markdown || ""
+  });
+}
+
+async function writeLastNoteSnapshotAndNotify(snapshot) {
+  await lastNoteSnapshotManager.writeLastNoteSnapshot(snapshot);
+  sendExportContent(snapshot.exportMarkdown || "");
+}
 
 function sendDigestStatus(text, options = {}) {
   chrome.runtime.sendMessage?.({
@@ -55,7 +69,15 @@ function sendDigestStatus(text, options = {}) {
   });
 }
 
-async function runDigestFollowUp({ question, results, settings, notePath, isFollowUp }) {
+async function runDigestFollowUp({
+  question,
+  results,
+  settings,
+  notePath,
+  isFollowUp,
+  snapshotBase,
+  exportMarkdown
+}) {
   sendDigestStatus("digest を生成しています...", { tone: "info" });
 
   const digestResult = await digestService.generateDigest({
@@ -120,35 +142,96 @@ async function runDigestFollowUp({ question, results, settings, notePath, isFoll
     }
   }
 
-  if (!digestResult.ok) {
-    const failureText = digestService.buildDigestFailureText(digestResult.error);
-    const updateFailure = await obsidianStorage.updateDigestInObsidian(notePath, failureText, settings);
-    if (!updateFailure.ok) {
-      sendDigestStatus("digest の生成と書き戻しに失敗しました。", {
-        tone: "error",
-        errorText: updateFailure.error || digestResult.error || "不明なエラー"
+  const digestText = digestResult.ok
+    ? digestResult.digest
+    : digestService.buildDigestFailureText(digestResult.error);
+
+  const replaced = noteContentBuilder.replaceDigestSection(exportMarkdown || "", digestText);
+  if (!replaced.ok) {
+    sendDigestStatus("digest の生成結果を Markdown 出力へ反映できませんでした。", {
+      tone: "error",
+      errorText: replaced.error || digestResult.error || "不明なエラー"
+    });
+    console.error("MirrorChat digest export update error:", replaced.error);
+    return;
+  }
+
+  if (snapshotBase) {
+    try {
+      await writeLastNoteSnapshotAndNotify({
+        ...snapshotBase,
+        exportMarkdown: replaced.content
       });
-      console.error("MirrorChat digest update error:", updateFailure.error);
+    } catch (error) {
+      sendDigestStatus("digest を Markdown 出力へ反映できませんでした。", {
+        tone: "error",
+        errorText: error?.message || String(error)
+      });
+      console.error("MirrorChat digest snapshot save error:", error);
       return;
     }
-    sendDigestStatus("digest の生成に失敗しました。ファイルに失敗状態を反映しました。", {
-      tone: "error",
-      errorText: digestResult.error || "不明なエラー"
-    });
+  } else {
+    sendExportContent(replaced.content);
+  }
+
+  const shouldUpdateObsidian =
+    noteContentBuilder.isObsidianConfigured(settings) && !!notePath;
+
+  if (!digestResult.ok) {
+    if (shouldUpdateObsidian) {
+      const updateFailure = await obsidianStorage.updateDigestInObsidian(
+        notePath,
+        digestText,
+        settings
+      );
+      if (!updateFailure.ok) {
+        sendDigestStatus(
+          "digest の生成に失敗しました。Markdown 出力には反映済みですが、Obsidian への反映に失敗しました。",
+          {
+            tone: "error",
+            errorText: updateFailure.error || digestResult.error || "不明なエラー"
+          }
+        );
+        console.error("MirrorChat digest update error:", updateFailure.error);
+        return;
+      }
+    }
+    sendDigestStatus(
+      shouldUpdateObsidian
+        ? "digest の生成に失敗しました。Markdown 出力と Obsidian に失敗状態を反映しました。"
+        : "digest の生成に失敗しました。Markdown 出力に失敗状態を反映しました。",
+      {
+        tone: "error",
+        errorText: digestResult.error || "不明なエラー"
+      }
+    );
     return;
   }
 
-  const updateResult = await obsidianStorage.updateDigestInObsidian(notePath, digestResult.digest, settings);
-  if (!updateResult.ok) {
-    sendDigestStatus("digest の生成には成功しましたが、Obsidian への反映に失敗しました。", {
-      tone: "error",
-      errorText: updateResult.error || "不明なエラー"
-    });
-    console.error("MirrorChat digest save error:", updateResult.error);
+  if (shouldUpdateObsidian) {
+    const updateResult = await obsidianStorage.updateDigestInObsidian(
+      notePath,
+      digestResult.digest,
+      settings
+    );
+    if (!updateResult.ok) {
+      sendDigestStatus(
+        "digest の生成には成功しましたが、Obsidian への反映に失敗しました。Markdown 出力には反映済みです。",
+        {
+          tone: "error",
+          errorText: updateResult.error || "不明なエラー"
+        }
+      );
+      console.error("MirrorChat digest save error:", updateResult.error);
+      return;
+    }
+    sendDigestStatus(`digest を反映しました。使用モデル: ${digestResult.modelId}`, { tone: "success" });
     return;
   }
 
-  sendDigestStatus(`digest を反映しました。使用モデル: ${digestResult.modelId}`, { tone: "success" });
+  sendDigestStatus(`digest を Markdown 出力に反映しました。使用モデル: ${digestResult.modelId}`, {
+    tone: "success"
+  });
 }
 
 function resolveEnabledAIs(rawEnabledAIs, aiOrder) {
@@ -189,8 +272,14 @@ async function runTask(task) {
   const hasAnyMarkdown = results.some((r) => r.markdown && r.markdown.trim().length > 0);
   const failed = results.filter((r) => r.error).map((r) => r.name);
   let saveResult = { ok: false };
+  let exportMarkdown = "";
 
   if (hasAnyMarkdown) {
+    exportMarkdown = noteContentBuilder.buildQuestionAnswersContent(
+      task.prompt,
+      results,
+      settings
+    );
     if (task.isFollowUp) {
       const basePath = task.basePath || (await new Promise((resolve) =>
         chrome.storage.local.get(LAST_SAVED_FOLDER_KEY, (x) => resolve(x[LAST_SAVED_FOLDER_KEY]))
@@ -220,7 +309,20 @@ async function runTask(task) {
       await retryStore.appendFailedItemToLocal(failedPayload);
       showNotification("MirrorChat: 一部失敗", `Obsidian保存失敗。失敗: ${failed.join(", ")}。再送可能です。`);
     } else {
-      showNotification("MirrorChat: 取得失敗", `全てのAIから回答を取得できませんでした。Obsidianには保存しませんでした。`);
+      showNotification("MirrorChat: 取得失敗", `全てのAIから回答を取得できませんでした。`);
+    }
+  } else if (saveResult.skipped) {
+    if (failed.length > 0) {
+      showNotification(
+        "MirrorChat: 一部失敗",
+        `取得失敗: ${failed.join(", ")}。Markdown 出力欄に表示しました。`
+      );
+    } else {
+      const aiCount = results.length;
+      showNotification(
+        "MirrorChat: 完了",
+        `${aiCount}つのAIから回答を取得し、Markdown 出力欄に表示しました。`
+      );
     }
   } else {
     if (failed.length > 0) {
@@ -233,12 +335,18 @@ async function runTask(task) {
 
   const saveFailed = !saveResult.ok && hasAnyMarkdown;
 
-  // ステータスメッセージを完了状態に更新（最後の「Grok の回答を取得中です...」を上書き）
-  aiCommunication.sendStatusText(
-    saveFailed
-      ? "Obsidian への保存に失敗しました。もう一度「回答を取得」を押して再試行してください。"
-      : "回答の取得と Obsidian への保存が完了しました。"
-  );
+  let statusText;
+  if (saveFailed) {
+    statusText =
+      "Obsidian への保存に失敗しました。Markdown 出力欄には表示済みです。もう一度「回答を取得」を押して再試行してください。";
+  } else if (saveResult.skipped) {
+    statusText = "回答の取得が完了し、Markdown 出力欄に表示しました。";
+  } else if (hasAnyMarkdown) {
+    statusText = "回答の取得と Obsidian への保存が完了しました。";
+  } else {
+    statusText = "回答を取得できませんでした。";
+  }
+  aiCommunication.sendStatusText(statusText);
 
   // 可能であれば MirrorChat のタブにフォーカスを戻す
   try {
@@ -256,32 +364,42 @@ async function runTask(task) {
     }
   }
 
-  if (saveResult.ok && saveResult.notePath) {
+  let snapshotBase = null;
+  if (hasAnyMarkdown) {
+    snapshotBase = {
+      question: task.prompt,
+      results,
+      notePath: saveResult.ok ? saveResult.notePath || null : null,
+      basePath: saveResult.ok ? saveResult.basePath || null : null,
+      fileName: saveResult.ok ? saveResult.fileName || null : null,
+      isFollowUp: !!task.isFollowUp,
+      obsidianSkipped: !!saveResult.skipped,
+      exportMarkdown,
+      savedAt: Date.now()
+    };
     try {
-      await lastNoteSnapshotManager.writeLastNoteSnapshot({
-        question: task.prompt,
-        results,
-        notePath: saveResult.notePath,
-        basePath: saveResult.basePath || null,
-        fileName: saveResult.fileName || null,
-        isFollowUp: !!task.isFollowUp,
-        savedAt: Date.now()
-      });
+      await writeLastNoteSnapshotAndNotify(snapshotBase);
     } catch (error) {
       console.warn("MirrorChat: 直近ノート情報の保存に失敗しました:", error);
-      aiCommunication.sendStatusText(
-        "保存は完了しましたが、直近ノート情報の保存に失敗しました。再保存/digest再生成が使えない場合があります。"
-      );
+      if (saveResult.ok) {
+        aiCommunication.sendStatusText(
+          "保存は完了しましたが、直近ノート情報の保存に失敗しました。再保存/digest再生成が使えない場合があります。"
+        );
+      }
+      sendExportContent(exportMarkdown);
+      snapshotBase = null;
     }
   }
 
-  if (saveResult.ok && digestService.isDigestEnabled(settings) && saveResult.notePath) {
+  if (saveResult.ok && hasAnyMarkdown && digestService.isDigestEnabled(settings)) {
     runDigestFollowUp({
       question: task.prompt,
       results,
       settings,
-      notePath: saveResult.notePath,
-      isFollowUp: !!task.isFollowUp
+      notePath: saveResult.notePath || null,
+      isFollowUp: !!task.isFollowUp,
+      snapshotBase,
+      exportMarkdown
     }).catch((error) => {
       sendDigestStatus("digest の生成に失敗しました。");
       console.error("MirrorChat digest follow-up error:", error);
@@ -444,12 +562,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     [MESSAGE_TYPES.RESAVE_LAST]: () => {
       (async () => {
         const snapshot = await lastNoteSnapshotManager.readLastNoteSnapshot();
-        if (!snapshot?.notePath || !snapshot?.question || !Array.isArray(snapshot?.results)) {
-          sendResponse({ ok: false, error: "再保存できる直近ノートがありません。まず通常の保存を一度実行してください。" });
+        const settings = await self.MirrorChatStorage.getSettings();
+        if (!snapshot?.question || !Array.isArray(snapshot?.results)) {
+          sendResponse({
+            ok: false,
+            error: "再保存できる直近ノートがありません。まず通常の保存を一度実行してください。"
+          });
+          return;
+        }
+        if (!noteContentBuilder.isObsidianConfigured(settings) || !snapshot.notePath) {
+          sendResponse({
+            ok: false,
+            error:
+              "Obsidian の保存先がないため再保存できません。Markdown 出力欄からコピーしてください。"
+          });
           return;
         }
 
-        const settings = await self.MirrorChatStorage.getSettings();
         const resaveResult = await obsidianStorage.rewriteNoteInObsidian(
           snapshot.notePath,
           snapshot.question,
@@ -461,15 +590,33 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           return;
         }
 
+        const exportMarkdown = noteContentBuilder.buildQuestionAnswersContent(
+          snapshot.question,
+          snapshot.results,
+          settings
+        );
+        const snapshotBase = {
+          ...snapshot,
+          exportMarkdown,
+          savedAt: Date.now()
+        };
+        try {
+          await writeLastNoteSnapshotAndNotify(snapshotBase);
+        } catch (error) {
+          console.warn("MirrorChat: 再保存後のスナップショット更新に失敗しました:", error);
+        }
+
         aiCommunication.sendStatusText("直近ノートを再保存しました。");
 
-        if (snapshot.notePath) {
+        if (digestService.isDigestEnabled(settings)) {
           runDigestFollowUp({
             question: snapshot.question,
             results: snapshot.results,
             settings,
             notePath: snapshot.notePath,
-            isFollowUp: !!snapshot.isFollowUp
+            isFollowUp: !!snapshot.isFollowUp,
+            snapshotBase,
+            exportMarkdown
           }).catch((error) => {
             sendDigestStatus("digest の再生成に失敗しました。", {
               tone: "error",
@@ -490,8 +637,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     [MESSAGE_TYPES.REGENERATE_DIGEST]: () => {
       (async () => {
         const snapshot = await lastNoteSnapshotManager.readLastNoteSnapshot();
-        if (!snapshot?.notePath || !snapshot?.question || !Array.isArray(snapshot?.results)) {
-          sendResponse({ ok: false, error: "digest を再生成できる直近ノートがありません。まず通常の保存を一度実行してください。" });
+        if (!snapshot?.question || !Array.isArray(snapshot?.results)) {
+          sendResponse({
+            ok: false,
+            error:
+              "digest を再生成できる直近の回答がありません。まず「回答を取得」を一度実行してください。"
+          });
           return;
         }
 
@@ -504,13 +655,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             preferredModel: selectedModel
           }
         };
+        const exportMarkdown =
+          snapshot.exportMarkdown ||
+          noteContentBuilder.buildQuestionAnswersContent(
+            snapshot.question,
+            snapshot.results,
+            digestSettings
+          );
+        const snapshotBase = {
+          ...snapshot,
+          exportMarkdown
+        };
 
         runDigestFollowUp({
           question: snapshot.question,
           results: snapshot.results,
           settings: digestSettings,
-          notePath: snapshot.notePath,
-          isFollowUp: !!snapshot.isFollowUp
+          notePath: snapshot.notePath || null,
+          isFollowUp: !!snapshot.isFollowUp,
+          snapshotBase,
+          exportMarkdown
         }).catch((error) => {
           sendDigestStatus("digest の再生成に失敗しました。", {
             tone: "error",

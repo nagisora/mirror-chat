@@ -32,7 +32,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   const resaveButton = document.getElementById("resave-button");
   const regenerateDigestButton = document.getElementById("regenerate-digest-button");
   const digestModelSelect = document.getElementById("digest-model-select");
+  const exportOutput = document.getElementById("export-output");
+  const copyExportButton = document.getElementById("copy-export-button");
+  const copyExportStatus = document.getElementById("copy-export-status");
   const tabStatus = document.getElementById("tab-status");
+  const noteContentBuilder = window.MirrorChatNoteContentBuilder;
 
   const constants = window.MirrorChatConstants || {};
   const AI_KEYS = constants.AI_KEYS ?? ["chatgpt", "claude", "gemini", "grok"];
@@ -60,6 +64,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const MSG_DIGEST_STATUS = MESSAGE_TYPES.DIGEST_STATUS || "MIRRORCHAT_DIGEST_STATUS";
   const MSG_AI_STATUS = MESSAGE_TYPES.AI_STATUS || "MIRRORCHAT_AI_STATUS";
   const MSG_DONE = MESSAGE_TYPES.DONE || "MIRRORCHAT_DONE";
+  const MSG_EXPORT_CONTENT = MESSAGE_TYPES.EXPORT_CONTENT || "MIRRORCHAT_EXPORT_CONTENT";
   const storage = window.MirrorChatStorage;
   const openRouterFreeModels = window.MirrorChatOpenRouterFreeModels;
   const openCodeZenFreeModels = window.MirrorChatOpenCodeZenFreeModels;
@@ -111,7 +116,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     hasPendingQuestion: false,
     allowCollect: false,
     hasFailedItems: false,
-    hasLastSavedNote: false,
+    hasLastObsidianNote: false,
+    hasLastExport: false,
+    exportMarkdown: "",
     busyAction: ""
   };
 
@@ -204,9 +211,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     collectButton.disabled = !hasOpenTabs || !appState.allowCollect || appState.busyAction === "collecting";
     retrySection.hidden = !appState.hasFailedItems;
     retryButton.disabled = !appState.hasFailedItems || appState.busyAction === "retrying";
-    resaveButton.disabled = !appState.hasLastSavedNote || appState.busyAction === "resaving";
-    regenerateDigestButton.disabled = !appState.hasLastSavedNote || appState.busyAction === "regenerating-digest";
-    digestModelSelect.disabled = !appState.hasLastSavedNote || appState.busyAction === "regenerating-digest";
+    resaveButton.disabled = !appState.hasLastObsidianNote || appState.busyAction === "resaving";
+    regenerateDigestButton.disabled =
+      !appState.hasLastExport || appState.busyAction === "regenerating-digest";
+    digestModelSelect.disabled =
+      !appState.hasLastExport || appState.busyAction === "regenerating-digest";
+    if (copyExportButton) {
+      copyExportButton.disabled = !appState.hasLastExport;
+    }
+    if (exportOutput) {
+      exportOutput.value = appState.exportMarkdown || "";
+    }
     status.textContent = appState.statusText;
     digestStatus.dataset.tone = appState.digestStatusTone || "info";
     digestStatusText.textContent = appState.digestStatusText;
@@ -235,6 +250,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     setState({ hasFailedItems: items.length > 0 });
   }
 
+  function resolveExportMarkdown(snapshot, settings) {
+    if (snapshot?.exportMarkdown) {
+      return snapshot.exportMarkdown;
+    }
+    if (
+      snapshot?.question &&
+      Array.isArray(snapshot?.results) &&
+      noteContentBuilder?.buildQuestionAnswersContent
+    ) {
+      return noteContentBuilder.buildQuestionAnswersContent(
+        snapshot.question,
+        snapshot.results,
+        settings
+      );
+    }
+    return "";
+  }
+
   async function syncLastSavedNoteState() {
     const [snapshot, settings] = await Promise.all([
       readLocalStorage(lastNoteSnapshotKey),
@@ -242,10 +275,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     ]);
     const nextOrder = applyAiOrderToTabItems(settings?.aiOrder);
     populateDigestModelSelect(settings);
+    const exportMarkdown = resolveExportMarkdown(snapshot, settings);
+    const hasLastExport = !!exportMarkdown;
+    const hasLastObsidianNote =
+      !!snapshot?.notePath && !!noteContentBuilder?.isObsidianConfigured?.(settings);
     setState({
       aiOrder: nextOrder,
       enabledAIs: normalizeEnabledAIs(appState.enabledAIs, nextOrder),
-      hasLastSavedNote: !!snapshot?.notePath
+      hasLastObsidianNote,
+      hasLastExport,
+      exportMarkdown
     });
     return snapshot;
   }
@@ -478,9 +517,36 @@ document.addEventListener("DOMContentLoaded", async () => {
     );
   }
 
+  async function copyExportMarkdown() {
+    const text = appState.exportMarkdown || "";
+    if (!text) {
+      setState({ statusText: "コピーする Markdown がありません。" });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      if (copyExportStatus) {
+        copyExportStatus.textContent = "コピーしました";
+      }
+    } catch (error) {
+      if (exportOutput) {
+        exportOutput.focus();
+        exportOutput.select();
+      }
+      if (copyExportStatus) {
+        copyExportStatus.textContent =
+          "クリップボードにコピーできませんでした。テキストを選択して手動でコピーしてください。";
+      }
+      console.warn("MirrorChat: export copy failed:", error);
+    }
+  }
+
   retryButton.addEventListener("click", doRetryFailedItems);
   resaveButton.addEventListener("click", doResave);
   regenerateDigestButton.addEventListener("click", doRegenerateDigest);
+  copyExportButton?.addEventListener("click", () => {
+    void copyExportMarkdown();
+  });
 
   AI_KEYS.forEach((key) => {
     const checkbox = aiCheckboxes[key];
@@ -516,6 +582,17 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
       return;
     }
+    if (msg.type === MSG_EXPORT_CONTENT) {
+      const markdown = msg.markdown || "";
+      setState({
+        exportMarkdown: markdown,
+        hasLastExport: !!markdown
+      });
+      if (copyExportStatus) {
+        copyExportStatus.textContent = "";
+      }
+      return;
+    }
     if (msg.type === MSG_DONE) {
       setState({
         busyAction: "",
@@ -546,7 +623,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const current = await syncTaskState();
   if (current?.prompt) {
     setState({
-      statusText: "前回の質問の回答が未取得です。「回答を取得」を押してObsidianに保存してください。"
+      statusText: "前回の質問の回答が未取得です。「回答を取得」を押してください。"
     });
   } else {
     render();

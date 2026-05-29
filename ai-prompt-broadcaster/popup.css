@@ -225,3 +225,30 @@ button:disabled {
   font-size: 12px;
   margin: 0 0 8px;
 }
+
+.export-section {
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.export-section label {
+  font-size: 12px;
+  color: #444;
+}
+
+#export-output {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  max-height: 240px;
+}
+
+.export-actions {
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+
+#copy-export-status {
+  color: #475569;
+  min-height: 0;
+}

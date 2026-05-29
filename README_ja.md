@@ -2,9 +2,9 @@
 
 [English](README.md) | [日本語](README_ja.md)
 
-1つのプロンプトを4つのAIサービスに順次送信し、ObsidianにMarkdownとして保存する Chrome 拡張機能です。
+1つのプロンプトを4つのAIサービスに順次送信し、回答を Markdown としてまとめる Chrome 拡張機能です。
 
-ChatGPT、Claude、Gemini、Grok の4つのAIチャットに同じ質問を一括送信し、回答を Obsidian の Vault に自動保存します。AI の回答を比較・検証したい方、Obsidian でナレッジ管理したい方に向いています。
+ChatGPT、Claude、Gemini、Grok の4つのAIチャットに同じ質問を一括送信し、画面の Markdown 出力欄に結果を表示してコピーできます。必要に応じて Obsidian の Vault にも保存できます。
 
 ![MirrorChat ポップアップ画面](docs/images/mirrorchat-popup-ja.png)
 
@@ -15,7 +15,8 @@ ChatGPT、Claude、Gemini、Grok の4つのAIチャットに同じ質問を一�
 ## 機能
 
 - 1つの質問を ChatGPT / Claude / Gemini / Grok に順次送信
-- Local REST API 経由で回答を Markdown として Obsidian に保存
+- 画面の Markdown 出力欄で結果を確認し、クリップボードへコピー
+- Local REST API 経由で回答を Markdown として Obsidian に保存（任意）
 - raw 回答保存後に OpenRouter の free モデルで digest を非同期生成
 - OpenRouter の `/models` から free 候補を更新可能
 - 「サイトを開く」→「送信」の2段階フローで、ログイン完了後に確実に送信

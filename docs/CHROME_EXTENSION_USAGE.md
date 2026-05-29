@@ -10,7 +10,9 @@
 4. Click Load unpacked.
 5. Select the `ai-prompt-broadcaster` folder.
 
-## 2. Prepare Obsidian
+## 2. Prepare Obsidian (optional)
+
+If you do not use Obsidian, you can skip this section. Leave the Obsidian base URL empty in Options and use the Markdown export area in the extension UI to copy results.
 
 1. Launch Obsidian and open your vault.
 2. Go to Settings, Community plugins, and disable Restricted mode if needed.
@@ -22,7 +24,7 @@
 ## 3. Configure the extension
 
 1. Right-click the extension icon and open Options.
-2. Set Obsidian Local REST API Base URL, for example `https://127.0.0.1:27124/`.
+2. If you use Obsidian, set Local REST API Base URL, for example `https://127.0.0.1:27124/`. Leave it empty if you only want Markdown export.
 3. Enter the API token from Obsidian if needed.
 4. Set Storage Root Path, for example `200-AI Research`.
 5. If you want digests, enable asynchronous digest generation after saving answers and set your OpenRouter API key.
@@ -35,9 +37,10 @@
 2. Click the extension icon.
 3. Enter your question and click Send.
 4. The extension opens the AI sites in sequence and submits the prompt automatically.
-5. After the answers are collected, a file such as `01-question-prefix.md` is created under `storage-root/YYYYMMDD-sequence-question-prefix/` in your Obsidian vault.
-6. Each question file contains `## Question`, `## Summary`, and the response sections for every AI. When digest is enabled, the summary initially shows a pending placeholder and is replaced later with an OpenRouter-generated digest.
-7. If digest generation fails, the raw answers remain saved and the summary section reflects the failure state.
+5. After the answers are collected, the **Markdown export** area shows the combined result. Use **Copy** to put it on the clipboard.
+6. If Obsidian is configured, a file such as `01-question-prefix.md` is also created under `storage-root/YYYYMMDD-sequence-question-prefix/` in your vault.
+7. The export contains question, summary, and per-AI response sections. When digest is enabled, the summary initially shows a pending placeholder and is replaced later with a generated digest.
+8. If digest generation fails, the raw answers remain in the export area and the summary section reflects the failure state.
 
 ## 5. Troubleshooting
 

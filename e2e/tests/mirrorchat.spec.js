@@ -19,6 +19,8 @@ test.describe("MirrorChat 拡張機能", () => {
     await expect(page.locator("#open-tabs-button")).toBeVisible();
     await expect(page.locator("#collect-button")).toBeVisible();
     await expect(page.locator("#resave-button")).toBeVisible();
+    await expect(page.locator("#export-output")).toBeVisible();
+    await expect(page.locator("#copy-export-button")).toBeVisible();
     await expect(page.locator("#regenerate-digest-button")).toBeVisible();
     await expect(page.locator("#digest-model-select")).toBeVisible();
     await expect(page.locator("#digest-status")).toBeVisible();
@@ -258,6 +260,46 @@ test.describe("MirrorChat 拡張機能", () => {
     expect(popupOrder).toEqual(["Grok", "Gemini", "ChatGPT", "Claude"]);
   });
 
+  test("exportMarkdown を復元してコピーできる", async ({ page, extensionId }) => {
+    await page.goto(`chrome-extension://${extensionId}/popup.html?standalone=1`);
+
+    const exportMarkdown = [
+      "## 質問",
+      "",
+      "テスト質問",
+      "",
+      "---",
+      "",
+      "## まとめ",
+      "",
+      "未生成"
+    ].join("\n");
+
+    await page.evaluate((markdown) => {
+      return new Promise((resolve) => {
+        chrome.storage.local.set(
+          {
+            mirrorchatLastNoteSnapshot: {
+              question: "テスト質問",
+              results: [{ name: "ChatGPT", markdown: "テスト回答" }],
+              exportMarkdown: markdown
+            }
+          },
+          resolve
+        );
+      });
+    }, exportMarkdown);
+
+    await page.reload();
+
+    await expect(page.locator("#export-output")).toHaveValue(exportMarkdown);
+    await expect(page.locator("#copy-export-button")).toBeEnabled();
+    await expect(page.locator("#regenerate-digest-button")).toBeEnabled();
+
+    await page.locator("#copy-export-button").click();
+    await expect(page.locator("#copy-export-status")).toContainText(/コピー/, { timeout: 5_000 });
+  });
+
   test("直近ノートがあれば再保存と digest再生成を実行できる", async ({ page, extensionId }) => {
     await page.goto(`chrome-extension://${extensionId}/popup.html?standalone=1`);
 
@@ -281,7 +323,8 @@ test.describe("MirrorChat 拡張機能", () => {
                 mirrorchatLastNoteSnapshot: {
                   question: "テスト質問",
                   results: [{ name: "ChatGPT", markdown: "テスト回答" }],
-                  notePath: "Test/01-test.md"
+                  notePath: "Test/01-test.md",
+                  exportMarkdown: "## 質問\n\nテスト質問\n\n---\n\n## まとめ\n\n未生成"
                 }
               },
               resolve
